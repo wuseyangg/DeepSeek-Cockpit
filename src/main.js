@@ -23,6 +23,11 @@ try {
   // 允许在服务未全部创建前基础启动
 }
 
+app.name = 'DeepSeek-Cockpit';
+if (process.platform === 'win32') {
+  app.setAppUserModelId('com.deepseek.cockpit');
+}
+
 let mainWindow = null;
 
 // 单实例锁
@@ -33,10 +38,19 @@ if (!gotTheLock) {
   app.on('second-instance', () => {
     if (mainWindow) {
       if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.show();
       mainWindow.focus();
     }
   });
 }
+
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught Exception in Main Process:', err);
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('Unhandled Rejection in Main Process:', reason);
+});
 
 function broadcastLog(level, message, source = 'system') {
   if (mainWindow && !mainWindow.isDestroyed()) {
