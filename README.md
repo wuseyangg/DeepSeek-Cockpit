@@ -43,8 +43,14 @@ pnpm test
 # 3. 本地启动桌面应用
 pnpm start
 
-# 4. 构建 Windows NSIS 安装包
-pnpm run dist
+# 4. 一键 PowerShell 脚本打包 (默认生成单文件便携 exe)
+.\build.ps1
+
+# 5. 或通过 pnpm 执行指定编译
+pnpm run build:portable   # 便携免安装版 exe
+pnpm run build:nsis       # 安装包 (NSIS Setup.exe)
+pnpm run build:dir        # 解压即用目录 (dist/win-unpacked)
+pnpm run build            # 同时生成安装包与便携版
 ```
 
 ---

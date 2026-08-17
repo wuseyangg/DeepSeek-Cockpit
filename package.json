@@ -6,6 +6,10 @@
   "scripts": {
     "start": "electron .",
     "test": "node --test test/*.test.js",
+    "build": "electron-builder --win",
+    "build:portable": "electron-builder --win portable",
+    "build:nsis": "electron-builder --win nsis",
+    "build:dir": "electron-builder --dir",
     "dist": "electron-builder"
   },
   "keywords": [

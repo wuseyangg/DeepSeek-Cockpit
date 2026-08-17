@@ -4,3 +4,4 @@ dist/
 *.invalid*
 .DS_Store
 Thumbs.db
+/.zcode/
