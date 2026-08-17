@@ -100,10 +100,10 @@ function initLogListener() {
       try {
         await navigator.clipboard.writeText(modalTerminal.textContent);
         const original = btnCopyModal.textContent;
-        btnCopyModal.textContent = 'copied';
+        btnCopyModal.textContent = '已复制';
         setTimeout(() => { btnCopyModal.textContent = original; }, 1200);
       } catch (err) {
-        console.error('copy failed:', err);
+        console.error('复制失败:', err);
       }
     });
   }
@@ -112,7 +112,7 @@ function initLogListener() {
   if (btnToggleLogs && terminal) {
     btnToggleLogs.addEventListener('click', () => {
       terminal.classList.toggle('collapsed');
-      btnToggleLogs.textContent = terminal.classList.contains('collapsed') ? 'show' : 'hide';
+      btnToggleLogs.textContent = terminal.classList.contains('collapsed') ? '展开' : '隐藏';
     });
   }
 }
@@ -149,13 +149,13 @@ function updateLauncherUIState(state) {
 
   if (dot) dot.className = `status-dot ${state.state}`;
   if (cmdPort) cmdPort.textContent = String(port);
-  if (stMeta) stMeta.textContent = `port :${port}`;
+  if (stMeta) stMeta.textContent = `端口 :${port}`;
 
   if (stText) {
-    if (state.state === 'running') stText.textContent = 'running';
-    else if (state.state === 'starting') stText.textContent = 'starting';
-    else if (state.state === 'failed') stText.textContent = 'failed';
-    else stText.textContent = 'stopped';
+    if (state.state === 'running') stText.textContent = '运行中';
+    else if (state.state === 'starting') stText.textContent = '启动中';
+    else if (state.state === 'failed') stText.textContent = '启动失败';
+    else stText.textContent = '已停止';
   }
 
   // PID
@@ -204,7 +204,7 @@ function updateUptimeDisplay() {
   const secs = Math.floor((Date.now() - uptimeStartTs) / 1000);
   const m = Math.floor(secs / 60);
   const s = secs % 60;
-  upEl.textContent = `uptime ${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  upEl.textContent = `已运行 ${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
 // 5. 配置加载
@@ -223,7 +223,7 @@ async function loadInitialConfig() {
       if (installPath) installPath.textContent = currentConfig.harnessPath;
     } else {
       if (statusRepo) statusRepo.textContent = '未配置';
-      if (installPath) installPath.textContent = 'no path configured';
+      if (installPath) installPath.textContent = '未配置路径';
     }
 
     if (currentConfig.web) {
@@ -235,7 +235,7 @@ async function loadInitialConfig() {
     const cmdPort = document.getElementById('launcher-cmd-port');
     const stMeta = document.getElementById('launcher-status-meta');
     if (cmdPort && portInput) cmdPort.textContent = portInput.value;
-    if (stMeta && portInput) stMeta.textContent = `port :${portInput.value}`;
+    if (stMeta && portInput) stMeta.textContent = `端口 :${portInput.value}`;
 
     if (currentConfig.harnessPath) {
       await refreshRepoStatus();
@@ -357,28 +357,28 @@ async function refreshRepoStatus() {
     const btnSync = document.getElementById('btn-sync-repo');
 
     if (!status.valid) {
-      if (branchEl) branchEl.textContent = 'invalid';
+      if (branchEl) branchEl.textContent = '无效';
       if (commitEl) commitEl.textContent = '-';
       if (upstreamEl) upstreamEl.textContent = '-';
-      if (syncDiffEl) syncDiffEl.textContent = status.message || 'no git repo';
+      if (syncDiffEl) syncDiffEl.textContent = status.message || '未检测到 Git 仓库';
       if (dirtyWarn) dirtyWarn.style.display = 'none';
       if (btnSync) btnSync.disabled = true;
       return;
     }
 
-    if (branchEl) branchEl.textContent = status.branch || 'detached';
+    if (branchEl) branchEl.textContent = status.branch || '游离';
     if (commitEl) commitEl.textContent = status.commit ? status.commit.slice(0, 7) : '-';
-    if (upstreamEl) upstreamEl.textContent = status.upstream || 'no upstream';
+    if (upstreamEl) upstreamEl.textContent = status.upstream || '无上游';
 
     if (syncDiffEl) {
       if (status.behind > 0) {
-        syncDiffEl.textContent = `behind ${status.behind}`;
+        syncDiffEl.textContent = `落后 ${status.behind}`;
         syncDiffEl.style.color = 'var(--warning)';
       } else if (status.ahead > 0) {
-        syncDiffEl.textContent = `ahead ${status.ahead}`;
+        syncDiffEl.textContent = `领先 ${status.ahead}`;
         syncDiffEl.style.color = 'var(--accent)';
       } else {
-        syncDiffEl.textContent = 'up-to-date';
+        syncDiffEl.textContent = '已是最新';
         syncDiffEl.style.color = 'var(--success)';
       }
     }
@@ -406,15 +406,15 @@ async function runPreflightCheck() {
     const res = await window.cockpit.web.preflight();
     let html = '';
 
-    html += `<div class="check-item"><span class="indicator">${res.nodeOk ? '✓' : '✗'}</span> node: ${res.nodeVersion || 'not found'}</div>`;
-    html += `<div class="check-item"><span class="indicator">${res.pnpmOk ? '✓' : '✗'}</span> pnpm: ${res.pnpmVersion || 'not found'}</div>`;
-    html += `<div class="check-item"><span class="indicator">${res.repoValid ? '✓' : '✗'}</span> harness repo path</div>`;
+    html += `<div class="check-item"><span class="indicator">${res.nodeOk ? '✓' : '✗'}</span> Node.js: ${res.nodeVersion || '未找到'}</div>`;
+    html += `<div class="check-item"><span class="indicator">${res.pnpmOk ? '✓' : '✗'}</span> pnpm: ${res.pnpmVersion || '未找到'}</div>`;
+    html += `<div class="check-item"><span class="indicator">${res.repoValid ? '✓' : '✗'}</span> Harness 仓库路径</div>`;
     html += `<div class="check-item"><span class="indicator">${res.depsInstalled ? '✓' : '!'}</span> node_modules</div>`;
-    html += `<div class="check-item"><span class="indicator">${res.buildArtifactsExist ? '✓' : '!'}</span> web build artifacts</div>`;
+    html += `<div class="check-item"><span class="indicator">${res.buildArtifactsExist ? '✓' : '!'}</span> Web 编译产物</div>`;
 
     container.innerHTML = html;
   } catch (err) {
-    container.innerHTML = `<div class="check-item"><span class="indicator">✗</span> preflight error: ${err.message}</div>`;
+    container.innerHTML = `<div class="check-item"><span class="indicator">✗</span> 预检错误: ${err.message}</div>`;
   }
 }
 
@@ -717,17 +717,17 @@ async function performInstallWithVisualization(source) {
   if (btnClose) btnClose.onclick = onDoneClick;
 
   updateInstallModalStep(1, 'active');
-  appendModalInstallLog(`validating source: ${targetSpec} ...`);
+  appendModalInstallLog(`正在校验来源: ${targetSpec} ...`);
   await new Promise(r => setTimeout(r, 200));
   updateInstallModalStep(1, 'completed');
 
   updateInstallModalStep(2, 'active');
-  appendModalInstallLog('backing up profile metadata ...');
+  appendModalInstallLog('正在备份 profile 元数据 ...');
   await new Promise(r => setTimeout(r, 250));
   updateInstallModalStep(2, 'completed');
 
   updateInstallModalStep(3, 'active');
-  appendModalInstallLog(`running: pnpm dsh plugin --profile web add ${targetSpec} ...`);
+  appendModalInstallLog(`执行: pnpm dsh plugin --profile web add ${targetSpec} ...`);
 
   let installRes;
   try {
@@ -739,7 +739,7 @@ async function performInstallWithVisualization(source) {
   if (installRes.ok) {
     updateInstallModalStep(3, 'completed');
     updateInstallModalStep(4, 'active');
-    appendModalInstallLog('refreshing profile plugin graph ...');
+    appendModalInstallLog('正在刷新 profile 插件图谱 ...');
     await new Promise(r => setTimeout(r, 200));
     updateInstallModalStep(4, 'completed');
 
@@ -748,7 +748,7 @@ async function performInstallWithVisualization(source) {
     updateInstallModalStep(3, 'error');
     updateInstallModalStep(4, 'error');
     const rawError = `${installRes.stderr || ''}\n${installRes.stdout || ''}`.trim();
-    appendModalInstallLog(`[ERROR] install failed: ${rawError || 'unknown'}`);
+    appendModalInstallLog(`[错误] 安装失败: ${rawError || '未知错误'}`);
 
     let userFriendlyMsg = rawError;
     if (rawError.includes('404') || rawError.includes('ERR_PNPM_FETCH_404') || rawError.includes('Not Found') || rawError.includes('pnpm failed')) {
@@ -831,7 +831,7 @@ async function renderCatalog() {
           <div class="catalog-title">${p.name}</div>
           <div class="catalog-desc">${p.description}</div>
         </div>
-        <button class="btn-cmd" onclick="installCatalogPlugin('${p.name}')">[ Install ]</button>
+        <button class="btn-cmd" onclick="installCatalogPlugin('${p.name}')">[ 安装 ]</button>
       </div>
     `).join('');
   } catch (err) {
