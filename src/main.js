@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, Tray, Menu, nativeImage } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs/promises');
 
@@ -29,19 +29,26 @@ if (process.platform === 'win32') {
 }
 
 let mainWindow = null;
+let tray = null;
+let appIcon = null;
+let isQuitting = false;
+
+function showMainWindow() {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    createWindow();
+    return;
+  }
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+}
 
 // 单实例锁
 const gotTheLock = app.requestSingleInstanceLock();
 if (!gotTheLock) {
   app.quit();
 } else {
-  app.on('second-instance', () => {
-    if (mainWindow) {
-      if (mainWindow.isMinimized()) mainWindow.restore();
-      mainWindow.show();
-      mainWindow.focus();
-    }
-  });
+  app.on('second-instance', showMainWindow);
 }
 
 process.on('uncaughtException', (err) => {
@@ -69,6 +76,30 @@ function broadcastProcessState(state) {
   }
 }
 
+// 读字节再交给 createFromBuffer，而不是 createFromPath —— 打包后图标在 app.asar 内，
+// fs.readFile 能穿透 asar，且 createFromBuffer 只认 PNG/JPEG（不解析 ICO）
+async function loadAppIcon() {
+  try {
+    const buf = await fs.readFile(path.join(__dirname, '../resources/tray.png'));
+    return nativeImage.createFromBuffer(buf);
+  } catch {
+    // ponytail: 图标缺失就降级为无托盘，不能让主进程起不来
+    return null;
+  }
+}
+
+function createTray() {
+  if (tray || !appIcon) return;
+  tray = new Tray(appIcon);
+  tray.setToolTip('DeepSeek Harness Cockpit');
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: '显示主界面', click: showMainWindow },
+    { type: 'separator' },
+    { label: '退出', click: () => app.quit() }
+  ]));
+  tray.on('click', showMainWindow);
+}
+
 async function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1080,
@@ -77,6 +108,7 @@ async function createWindow() {
     minHeight: 620,
     autoHideMenuBar: true,
     title: 'DeepSeek Harness Cockpit',
+    icon: appIcon || undefined,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -86,6 +118,21 @@ async function createWindow() {
   });
 
   mainWindow.loadFile(path.join(__dirname, 'renderer/index.html'));
+
+  // 最小化与关闭都收进托盘，只有托盘菜单的「退出」才真正退出，
+  // 避免误关标题栏 × 时把正在跑的 dsh web 一起停掉。
+  // 托盘没建起来时必须放行，否则窗口既唤不回也退不出。
+  mainWindow.on('minimize', (event) => {
+    if (!tray) return;
+    event.preventDefault();
+    mainWindow.hide();
+  });
+
+  mainWindow.on('close', (event) => {
+    if (!tray || isQuitting) return;
+    event.preventDefault();
+    mainWindow.hide();
+  });
 
   mainWindow.on('closed', () => {
     mainWindow = null;
@@ -258,8 +305,11 @@ function setupIpcHandlers() {
   });
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   setupIpcHandlers();
+  // 先载入图标：托盘和窗口图标复用同一份，顺序不能颠倒
+  appIcon = await loadAppIcon();
+  createTray();
   createWindow();
 
   app.on('activate', () => {
@@ -268,6 +318,8 @@ app.whenReady().then(() => {
 });
 
 app.on('before-quit', async (event) => {
+  // 在窗口 close 事件之前置位，否则 close 处理器会把退出流程挡住
+  isQuitting = true;
   if (harnessService && harnessService.isWebRunning && harnessService.isWebRunning()) {
     event.preventDefault();
     try {
