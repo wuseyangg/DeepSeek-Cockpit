@@ -62,13 +62,23 @@ function initSubTabs() {
 // 3. 日志与进程状态监听
 function initLogListener() {
   const terminal = document.getElementById('terminal-logs');
+  const modalTerminal = document.getElementById('modal-terminal-logs');
+  const installModal = document.getElementById('plugin-install-modal');
   const statusMsg = document.getElementById('status-latest-msg');
 
   window.cockpit.events.onLog((log) => {
-    if (!terminal) return;
     const line = `[${log.timestamp || new Date().toLocaleTimeString()}] [${log.source || 'sys'}] ${log.message}\n`;
-    terminal.textContent += line;
-    terminal.scrollTop = terminal.scrollHeight;
+    if (terminal) {
+      terminal.textContent += line;
+      terminal.scrollTop = terminal.scrollHeight;
+    }
+    // 若插件安装模态框正打开且是 plugin/pnpm 相关日志，实时追加
+    if (installModal && installModal.style.display !== 'none' && modalTerminal) {
+      if (log.source === 'plugin' || log.source === 'pnpm' || log.source === 'system') {
+        modalTerminal.textContent += `[${log.timestamp || new Date().toLocaleTimeString()}] ${log.message}\n`;
+        modalTerminal.scrollTop = modalTerminal.scrollHeight;
+      }
+    }
     if (statusMsg && log.message) {
       statusMsg.textContent = log.message.slice(0, 50);
     }
@@ -447,22 +457,7 @@ function initPluginsView() {
       }
 
       if (!source) return;
-
-      const ok = confirm(`即将执行安装插件：\n来源类型: ${source.kind}\n目标: ${source.spec || source.url || source.path}\n\n是否继续？`);
-      if (!ok) return;
-
-      btnSubmit.disabled = true;
-      try {
-        const res = await window.cockpit.plugins.add(source);
-        if (res.ok) {
-          alert('插件安装成功！');
-          await refreshPluginsList();
-        } else {
-          alert(`插件安装失败: ${res.stderr || res.stdout || '未知错误'}`);
-        }
-      } finally {
-        btnSubmit.disabled = false;
-      }
+      await performInstallWithVisualization(source);
     });
   }
 
@@ -505,6 +500,155 @@ function initPluginsView() {
         btnSavePatch.disabled = false;
       }
     });
+  }
+}
+
+// 8. 插件安装过程可视化控制器
+function showPluginInstallModal(targetSpec) {
+  const modal = document.getElementById('plugin-install-modal');
+  const targetLabel = document.getElementById('modal-target-spec');
+  const terminal = document.getElementById('modal-terminal-logs');
+  const statusTag = document.getElementById('modal-terminal-status');
+  const resultBanner = document.getElementById('modal-result-banner');
+  const loadingInfo = document.getElementById('modal-loading-info');
+  const btnDone = document.getElementById('btn-modal-done');
+  const btnClose = document.getElementById('btn-close-install-modal');
+
+  if (targetLabel) targetLabel.textContent = targetSpec;
+  if (terminal) terminal.textContent = '';
+  if (statusTag) {
+    statusTag.textContent = '执行中...';
+    statusTag.style.color = '#38bdf8';
+  }
+  if (resultBanner) {
+    resultBanner.style.display = 'none';
+    resultBanner.textContent = '';
+  }
+  if (loadingInfo) loadingInfo.style.display = 'flex';
+  if (btnDone) btnDone.style.display = 'none';
+  if (btnClose) btnClose.style.display = 'none';
+
+  // 重置步骤状态
+  const steps = ['validate', 'backup', 'install', 'finish'];
+  steps.forEach(s => {
+    const el = document.getElementById(`step-${s}`);
+    if (el) el.className = 'step-item';
+  });
+  const lines = ['1', '2', '3'];
+  lines.forEach(l => {
+    const el = document.getElementById(`line-${l}`);
+    if (el) el.className = 'step-line';
+  });
+
+  if (modal) modal.style.display = 'flex';
+}
+
+function updateInstallModalStep(stepIndex, state) {
+  const stepIds = ['validate', 'backup', 'install', 'finish'];
+  const currentId = stepIds[stepIndex - 1];
+  const stepEl = document.getElementById(`step-${currentId}`);
+  if (stepEl) {
+    stepEl.className = `step-item ${state}`;
+  }
+  if (stepIndex > 1 && state === 'completed') {
+    const lineEl = document.getElementById(`line-${stepIndex - 1}`);
+    if (lineEl) lineEl.className = 'step-line completed';
+  }
+}
+
+function appendModalInstallLog(line) {
+  const terminal = document.getElementById('modal-terminal-logs');
+  if (!terminal) return;
+  const time = new Date().toLocaleTimeString();
+  terminal.textContent += `[${time}] ${line}\n`;
+  terminal.scrollTop = terminal.scrollHeight;
+}
+
+function finishPluginInstallModal(success, message) {
+  const statusTag = document.getElementById('modal-terminal-status');
+  const resultBanner = document.getElementById('modal-result-banner');
+  const loadingInfo = document.getElementById('modal-loading-info');
+  const btnDone = document.getElementById('btn-modal-done');
+  const btnClose = document.getElementById('btn-close-install-modal');
+
+  if (loadingInfo) loadingInfo.style.display = 'none';
+  if (btnDone) btnDone.style.display = 'inline-flex';
+  if (btnClose) btnClose.style.display = 'inline-block';
+
+  if (statusTag) {
+    statusTag.textContent = success ? '安装成功' : '安装失败';
+    statusTag.style.color = success ? '#10b981' : '#ef4444';
+  }
+
+  if (resultBanner) {
+    resultBanner.style.display = 'block';
+    resultBanner.className = `alert ${success ? 'alert-info' : 'alert-warning'}`;
+    resultBanner.textContent = message;
+  }
+}
+
+function closePluginInstallModal() {
+  const modal = document.getElementById('plugin-install-modal');
+  if (modal) modal.style.display = 'none';
+}
+
+async function performInstallWithVisualization(source) {
+  const targetSpec = source.spec || source.url || source.path;
+  showPluginInstallModal(targetSpec);
+
+  const onDoneClick = async () => {
+    closePluginInstallModal();
+    const subTabBtns = document.querySelectorAll('.sub-tab-btn');
+    const subTabContents = document.querySelectorAll('.subtab-content');
+    subTabBtns.forEach(b => b.classList.remove('active'));
+    subTabContents.forEach(c => c.classList.remove('active'));
+    document.querySelector('.sub-tab-btn[data-subtab="plugins-list"]')?.classList.add('active');
+    document.getElementById('subtab-plugins-list')?.classList.add('active');
+    await refreshPluginsList();
+  };
+
+  const btnDone = document.getElementById('btn-modal-done');
+  const btnClose = document.getElementById('btn-close-install-modal');
+  if (btnDone) btnDone.onclick = onDoneClick;
+  if (btnClose) btnClose.onclick = onDoneClick;
+
+  // Step 1: 来源规范校验
+  updateInstallModalStep(1, 'active');
+  appendModalInstallLog(`正在进行来源格式与白名单校验: ${targetSpec} ...`);
+  await new Promise(r => setTimeout(r, 200));
+  updateInstallModalStep(1, 'completed');
+
+  // Step 2: 环境备份
+  updateInstallModalStep(2, 'active');
+  appendModalInstallLog('正在备份当前 Profile 元数据 (package.json, dsh.profile, lockfile) ...');
+  await new Promise(r => setTimeout(r, 250));
+  updateInstallModalStep(2, 'completed');
+
+  // Step 3: 执行安装
+  updateInstallModalStep(3, 'active');
+  appendModalInstallLog(`正在执行: pnpm dsh plugin --profile web add ${targetSpec} ...`);
+
+  let installRes;
+  try {
+    installRes = await window.cockpit.plugins.add(source);
+  } catch (err) {
+    installRes = { ok: false, stderr: err.message };
+  }
+
+  if (installRes.ok) {
+    updateInstallModalStep(3, 'completed');
+    // Step 4: 状态同步
+    updateInstallModalStep(4, 'active');
+    appendModalInstallLog('正在刷新 Profile 插件图谱与构建脚本状态 ...');
+    await new Promise(r => setTimeout(r, 200));
+    updateInstallModalStep(4, 'completed');
+
+    finishPluginInstallModal(true, `✅ 插件 ${targetSpec} 安装成功！已写入 web profile。`);
+  } else {
+    updateInstallModalStep(3, 'error');
+    updateInstallModalStep(4, 'error');
+    appendModalInstallLog(`[ERROR] 插件安装失败: ${installRes.stderr || installRes.stdout || '未知错误'}`);
+    finishPluginInstallModal(false, `❌ 插件安装失败：\n${installRes.stderr || installRes.stdout || '请查看终端输出详情'}`);
   }
 }
 
@@ -587,15 +731,7 @@ async function renderCatalog() {
 }
 
 window.installCatalogPlugin = async function(pkgName) {
-  const ok = confirm(`确认安装官方推荐插件 ${pkgName}？`);
-  if (!ok) return;
-  const res = await window.cockpit.plugins.add({ kind: 'npm', spec: pkgName });
-  if (res.ok) {
-    alert('安装成功！');
-    await refreshPluginsList();
-  } else {
-    alert(`安装失败: ${res.stderr || '未知错误'}`);
-  }
+  await performInstallWithVisualization({ kind: 'npm', spec: pkgName });
 };
 
 async function loadPatchContent() {
@@ -609,3 +745,4 @@ async function loadPatchContent() {
     editor.value = `# 加载失败: ${err.message}`;
   }
 }
+

@@ -264,6 +264,65 @@
     </footer>
   </div>
 
+  <!-- 插件安装过程可视化模态框 -->
+  <div id="plugin-install-modal" class="modal-overlay" style="display: none;">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3 id="modal-install-title">插件安装向导</h3>
+        <button id="btn-close-install-modal" class="modal-close-btn" style="display: none;">✕</button>
+      </div>
+
+      <div class="modal-body">
+        <div class="install-target-banner">
+          <span class="target-label">目标插件:</span>
+          <span class="target-name" id="modal-target-spec">-</span>
+        </div>
+
+        <!-- 4 阶段步骤条 -->
+        <div class="install-steps">
+          <div class="step-item" id="step-validate">
+            <div class="step-dot">1</div>
+            <div class="step-label">来源校验</div>
+          </div>
+          <div class="step-line" id="line-1"></div>
+          <div class="step-item" id="step-backup">
+            <div class="step-dot">2</div>
+            <div class="step-label">环境备份</div>
+          </div>
+          <div class="step-line" id="line-2"></div>
+          <div class="step-item" id="step-install">
+            <div class="step-dot">3</div>
+            <div class="step-label">依赖安装</div>
+          </div>
+          <div class="step-line" id="line-3"></div>
+          <div class="step-item" id="step-finish">
+            <div class="step-dot">4</div>
+            <div class="step-label">状态同步</div>
+          </div>
+        </div>
+
+        <!-- 实时安装终端日志 -->
+        <div class="modal-terminal-container">
+          <div class="modal-terminal-header">
+            <span>实时安装日志</span>
+            <span id="modal-terminal-status" class="terminal-status-tag">执行中...</span>
+          </div>
+          <pre id="modal-terminal-logs" class="modal-terminal-body"></pre>
+        </div>
+
+        <div id="modal-result-banner" class="alert" style="display: none;"></div>
+      </div>
+
+      <div class="modal-footer">
+        <div class="modal-loading-info" id="modal-loading-info">
+          <span class="spinner"></span>
+          <span id="modal-loading-text">正在处理中，请稍候...</span>
+        </div>
+        <button id="btn-modal-done" class="btn btn-primary" style="display: none;">完成并返回列表</button>
+      </div>
+    </div>
+  </div>
+
   <script src="app.js"></script>
 </body>
 </html>
