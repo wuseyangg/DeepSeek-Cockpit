@@ -18,6 +18,13 @@ async function validateAndNormalizeSource(source) {
     if (spec.startsWith('-') || /[\s;`$|&><\r\n\t]/.test(spec)) {
       return { valid: false, error: 'npm 包名包含非法字符或命令注入风险' };
     }
+    // 常见拼写纠错提示
+    if (spec.startsWith('@cordisis/')) {
+      return {
+        valid: false,
+        error: `检测到疑似拼写错误: "${spec}"。您是否是指 "@cordisjs/${spec.slice(10)}"?`
+      };
+    }
     if (!NPM_SPEC_REGEX.test(spec)) {
       return { valid: false, error: 'npm 包名或版本格式不正确' };
     }

@@ -647,8 +647,17 @@ async function performInstallWithVisualization(source) {
   } else {
     updateInstallModalStep(3, 'error');
     updateInstallModalStep(4, 'error');
-    appendModalInstallLog(`[ERROR] 插件安装失败: ${installRes.stderr || installRes.stdout || '未知错误'}`);
-    finishPluginInstallModal(false, `❌ 插件安装失败：\n${installRes.stderr || installRes.stdout || '请查看终端输出详情'}`);
+    const rawError = `${installRes.stderr || ''}\n${installRes.stdout || ''}`.trim();
+    appendModalInstallLog(`[ERROR] 插件安装失败: ${rawError || '未知错误'}`);
+
+    let userFriendlyMsg = rawError;
+    if (rawError.includes('404') || rawError.includes('ERR_PNPM_FETCH_404') || rawError.includes('Not Found') || rawError.includes('pnpm failed')) {
+      userFriendlyMsg = `未在 npm 源中找到指定的包 "${targetSpec}" (404 Not Found)。\n💡 提示：请核对包名拼写（例如确认是否误将 @cordisjs 拼写成了 @cordisis）。`;
+    } else if (rawError.includes('ETIMEDOUT') || rawError.includes('fetch failed')) {
+      userFriendlyMsg = `网络请求超时，无法从 npm 仓库拉取包 "${targetSpec}"。\n💡 提示：请检查网络连接或 npm 镜像源配置。`;
+    }
+
+    finishPluginInstallModal(false, `❌ 插件安装失败：\n${userFriendlyMsg}`);
   }
 }
 
