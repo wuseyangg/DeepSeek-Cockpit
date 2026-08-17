@@ -1,6 +1,8 @@
 // 渲染层全局控制器
 let currentConfig = null;
-let webProcessState = { state: 'stopped', port: 3080, url: null };
+let webProcessState = { state: 'stopped', port: 3080, url: null, pid: null };
+let uptimeTimerId = null;
+let uptimeStartTs = null;
 
 document.addEventListener('DOMContentLoaded', async () => {
   initNavigation();
@@ -8,8 +10,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   initLogListener();
   initProcessStateListener();
   await loadInitialConfig();
-  initRepoView();
-  initWebView();
+  initInstallView();
+  initLauncherView();
   initPluginsView();
 });
 
@@ -72,7 +74,6 @@ function initLogListener() {
       terminal.textContent += line;
       terminal.scrollTop = terminal.scrollHeight;
     }
-    // 若插件安装模态框正打开且是 plugin/pnpm 相关日志，实时追加
     if (installModal && installModal.style.display !== 'none' && modalTerminal) {
       if (log.source === 'plugin' || log.source === 'pnpm' || log.source === 'system') {
         const ts = log.timestamp || new Date().toLocaleTimeString();
@@ -99,70 +100,142 @@ function initLogListener() {
       try {
         await navigator.clipboard.writeText(modalTerminal.textContent);
         const original = btnCopyModal.textContent;
-        btnCopyModal.textContent = '已复制';
+        btnCopyModal.textContent = 'copied';
         setTimeout(() => { btnCopyModal.textContent = original; }, 1200);
       } catch (err) {
-        console.error('复制失败:', err);
+        console.error('copy failed:', err);
       }
+    });
+  }
+
+  const btnToggleLogs = document.getElementById('btn-toggle-logs');
+  if (btnToggleLogs && terminal) {
+    btnToggleLogs.addEventListener('click', () => {
+      terminal.classList.toggle('collapsed');
+      btnToggleLogs.textContent = terminal.classList.contains('collapsed') ? 'show' : 'hide';
     });
   }
 }
 
+// 4. 进程状态 → UI
 function initProcessStateListener() {
   window.cockpit.events.onProcessState((state) => {
-    updateWebUIState(state);
+    updateLauncherUIState(state);
   });
 }
 
-function updateWebUIState(state) {
+function updateLauncherUIState(state) {
   webProcessState = state;
+  const port = state.port || 3080;
+
+  // 底部状态栏 (兼容旧)
   const ind = document.getElementById('status-web-indicator');
   const txt = document.getElementById('status-web-text');
-  const btnStart = document.getElementById('btn-start-web');
-  const btnStop = document.getElementById('btn-stop-web');
-  const btnRestart = document.getElementById('btn-restart-web');
-  const btnOpen = document.getElementById('btn-open-browser');
-
   if (ind && txt) {
     ind.className = `dot dot-${state.state}`;
-    if (state.state === 'running') {
-      txt.textContent = `Web: 运行中 (:${state.port})`;
-    } else if (state.state === 'starting') {
-      txt.textContent = `Web: 正在启动...`;
-    } else {
-      txt.textContent = `Web: 已停止`;
-    }
+    if (state.state === 'running') txt.textContent = `Web: 运行中 (:${port})`;
+    else if (state.state === 'starting') txt.textContent = 'Web: 正在启动...';
+    else if (state.state === 'failed') txt.textContent = 'Web: 启动失败';
+    else txt.textContent = 'Web: 已停止';
   }
+
+  // 启动器顶栏
+  const dot = document.getElementById('launcher-status-dot');
+  const stText = document.getElementById('launcher-status-text');
+  const stMeta = document.getElementById('launcher-status-meta');
+  const pidLabel = document.getElementById('launcher-pid-label');
+  const pidVal = document.getElementById('launcher-pid');
+  const cmdPort = document.getElementById('launcher-cmd-port');
+
+  if (dot) dot.className = `status-dot ${state.state}`;
+  if (cmdPort) cmdPort.textContent = String(port);
+  if (stMeta) stMeta.textContent = `port :${port}`;
+
+  if (stText) {
+    if (state.state === 'running') stText.textContent = 'running';
+    else if (state.state === 'starting') stText.textContent = 'starting';
+    else if (state.state === 'failed') stText.textContent = 'failed';
+    else stText.textContent = 'stopped';
+  }
+
+  // PID
+  if (state.state === 'running' && state.pid) {
+    if (pidLabel) pidLabel.style.display = 'inline-flex';
+    if (pidVal) pidVal.textContent = String(state.pid);
+  } else {
+    if (pidLabel) pidLabel.style.display = 'none';
+  }
+
+  // 按钮启停
+  const btnRun = document.getElementById('btn-run-main');
+  const btnRestart = document.getElementById('btn-restart-main');
+  const btnStop = document.getElementById('btn-stop-main');
+  const btnOpen = document.getElementById('btn-open-main');
 
   const isRunning = state.state === 'running';
   const isStarting = state.state === 'starting';
 
-  if (btnStart) btnStart.disabled = isRunning || isStarting;
-  if (btnStop) btnStop.disabled = !isRunning && !isStarting;
+  if (btnRun) btnRun.disabled = isRunning || isStarting;
   if (btnRestart) btnRestart.disabled = !isRunning;
-  if (btnOpen) btnOpen.disabled = !isRunning;
+  if (btnStop) btnStop.disabled = !isRunning && !isStarting;
+  if (btnOpen) btnOpen.disabled = !isRunning || !state.url;
+
+  // Uptime timer
+  if (isRunning) {
+    if (!uptimeTimerId) {
+      uptimeStartTs = Date.now();
+      uptimeTimerId = setInterval(updateUptimeDisplay, 1000);
+      updateUptimeDisplay();
+    }
+  } else {
+    if (uptimeTimerId) {
+      clearInterval(uptimeTimerId);
+      uptimeTimerId = null;
+      uptimeStartTs = null;
+      const upEl = document.getElementById('launcher-uptime');
+      if (upEl) upEl.textContent = '';
+    }
+  }
 }
 
-// 4. 配置初始化与状态更新
+function updateUptimeDisplay() {
+  const upEl = document.getElementById('launcher-uptime');
+  if (!upEl || !uptimeStartTs) return;
+  const secs = Math.floor((Date.now() - uptimeStartTs) / 1000);
+  const m = Math.floor(secs / 60);
+  const s = secs % 60;
+  upEl.textContent = `uptime ${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
+// 5. 配置加载
 async function loadInitialConfig() {
   try {
     currentConfig = await window.cockpit.config.load();
     const repoInput = document.getElementById('repo-path-input');
     const statusRepo = document.getElementById('status-repo-path');
+    const installPath = document.getElementById('install-repo-path');
     const portInput = document.getElementById('web-port-input');
     const autoOpenCheck = document.getElementById('web-auto-open');
 
     if (currentConfig.harnessPath) {
       if (repoInput) repoInput.value = currentConfig.harnessPath;
       if (statusRepo) statusRepo.textContent = currentConfig.harnessPath;
+      if (installPath) installPath.textContent = currentConfig.harnessPath;
     } else {
       if (statusRepo) statusRepo.textContent = '未配置';
+      if (installPath) installPath.textContent = 'no path configured';
     }
 
     if (currentConfig.web) {
       if (portInput) portInput.value = currentConfig.web.port || 3080;
       if (autoOpenCheck) autoOpenCheck.checked = currentConfig.web.autoOpenBrowser !== false;
     }
+
+    // 同步启动器端口显示
+    const cmdPort = document.getElementById('launcher-cmd-port');
+    const stMeta = document.getElementById('launcher-status-meta');
+    if (cmdPort && portInput) cmdPort.textContent = portInput.value;
+    if (stMeta && portInput) stMeta.textContent = `port :${portInput.value}`;
 
     if (currentConfig.harnessPath) {
       await refreshRepoStatus();
@@ -174,12 +247,14 @@ async function loadInitialConfig() {
   }
 }
 
-// 5. 仓库视图逻辑
-function initRepoView() {
+// 6. 安装视图 (path + git + preflight)
+function initInstallView() {
   const btnBrowse = document.getElementById('btn-browse-repo');
   const btnClone = document.getElementById('btn-clone-repo');
   const btnFetch = document.getElementById('btn-fetch-repo');
   const btnSync = document.getElementById('btn-sync-repo');
+  const btnRecheck = document.getElementById('btn-recheck-preflight');
+  const btnPrepare = document.getElementById('btn-prepare-harness');
 
   if (btnBrowse) {
     btnBrowse.addEventListener('click', async () => {
@@ -196,7 +271,7 @@ function initRepoView() {
       const targetDir = await window.cockpit.repo.pickDirectory();
       if (!targetDir) return;
       const remote = currentConfig?.remoteUrl || 'https://github.com/deepseek-ai/deepseek-harness.git';
-      const confirmed = confirm(`确认克隆 ${remote} 到目录 ${targetDir}？`);
+      const confirmed = confirm(`确认克隆 ${remote} 到 ${targetDir} ?`);
       if (!confirmed) return;
 
       btnClone.disabled = true;
@@ -205,7 +280,7 @@ function initRepoView() {
         if (res.ok) {
           await window.cockpit.config.save({ harnessPath: targetDir });
           await loadInitialConfig();
-          alert('克隆成功！');
+          alert('克隆成功!');
         } else {
           alert(`克隆失败: ${res.stderr || res.stdout || '未知错误'}`);
         }
@@ -233,13 +308,38 @@ function initRepoView() {
       try {
         const res = await window.cockpit.repo.sync();
         if (res.ok) {
-          alert('同步成功！');
+          alert('同步成功!');
         } else {
           alert(`同步失败: ${res.stderr || '请检查 Git 状态'}`);
         }
         await refreshRepoStatus();
       } finally {
         btnSync.disabled = false;
+      }
+    });
+  }
+
+  if (btnRecheck) {
+    btnRecheck.addEventListener('click', async () => {
+      await runPreflightCheck();
+    });
+  }
+
+  if (btnPrepare) {
+    btnPrepare.addEventListener('click', async () => {
+      const ok = confirm('将执行 pnpm install && pnpm run build, 可能需要几分钟, 是否继续?');
+      if (!ok) return;
+      btnPrepare.disabled = true;
+      try {
+        const res = await window.cockpit.web.prepare();
+        if (res.ok) {
+          alert('依赖安装与编译完成!');
+        } else {
+          alert(`编译失败: ${res.stderr || '请查看终端日志'}`);
+        }
+        await runPreflightCheck();
+      } finally {
+        btnPrepare.disabled = false;
       }
     });
   }
@@ -257,10 +357,10 @@ async function refreshRepoStatus() {
     const btnSync = document.getElementById('btn-sync-repo');
 
     if (!status.valid) {
-      if (branchEl) branchEl.textContent = '无效目录';
+      if (branchEl) branchEl.textContent = 'invalid';
       if (commitEl) commitEl.textContent = '-';
       if (upstreamEl) upstreamEl.textContent = '-';
-      if (syncDiffEl) syncDiffEl.textContent = status.message || '未检测到 Git 仓库';
+      if (syncDiffEl) syncDiffEl.textContent = status.message || 'no git repo';
       if (dirtyWarn) dirtyWarn.style.display = 'none';
       if (btnSync) btnSync.disabled = true;
       return;
@@ -268,18 +368,18 @@ async function refreshRepoStatus() {
 
     if (branchEl) branchEl.textContent = status.branch || 'detached';
     if (commitEl) commitEl.textContent = status.commit ? status.commit.slice(0, 7) : '-';
-    if (upstreamEl) upstreamEl.textContent = status.upstream || '无上游';
+    if (upstreamEl) upstreamEl.textContent = status.upstream || 'no upstream';
 
     if (syncDiffEl) {
       if (status.behind > 0) {
-        syncDiffEl.textContent = `落后 ${status.behind} 个提交`;
-        syncDiffEl.style.color = '#fbbf24';
+        syncDiffEl.textContent = `behind ${status.behind}`;
+        syncDiffEl.style.color = 'var(--warning)';
       } else if (status.ahead > 0) {
-        syncDiffEl.textContent = `领先 ${status.ahead} 个提交`;
-        syncDiffEl.style.color = '#60a5fa';
+        syncDiffEl.textContent = `ahead ${status.ahead}`;
+        syncDiffEl.style.color = 'var(--accent)';
       } else {
-        syncDiffEl.textContent = `已是最新`;
-        syncDiffEl.style.color = '#10b981';
+        syncDiffEl.textContent = 'up-to-date';
+        syncDiffEl.style.color = 'var(--success)';
       }
     }
 
@@ -298,47 +398,47 @@ async function refreshRepoStatus() {
   }
 }
 
-// 6. Web 服务视图逻辑
-function initWebView() {
-  const btnRecheck = document.getElementById('btn-recheck-preflight');
-  const btnPrepare = document.getElementById('btn-prepare-harness');
-  const btnStart = document.getElementById('btn-start-web');
-  const btnStop = document.getElementById('btn-stop-web');
-  const btnRestart = document.getElementById('btn-restart-web');
-  const btnOpen = document.getElementById('btn-open-browser');
+async function runPreflightCheck() {
+  const container = document.getElementById('preflight-list');
+  if (!container) return;
+
+  try {
+    const res = await window.cockpit.web.preflight();
+    let html = '';
+
+    html += `<div class="check-item"><span class="indicator">${res.nodeOk ? '✓' : '✗'}</span> node: ${res.nodeVersion || 'not found'}</div>`;
+    html += `<div class="check-item"><span class="indicator">${res.pnpmOk ? '✓' : '✗'}</span> pnpm: ${res.pnpmVersion || 'not found'}</div>`;
+    html += `<div class="check-item"><span class="indicator">${res.repoValid ? '✓' : '✗'}</span> harness repo path</div>`;
+    html += `<div class="check-item"><span class="indicator">${res.depsInstalled ? '✓' : '!'}</span> node_modules</div>`;
+    html += `<div class="check-item"><span class="indicator">${res.buildArtifactsExist ? '✓' : '!'}</span> web build artifacts</div>`;
+
+    container.innerHTML = html;
+  } catch (err) {
+    container.innerHTML = `<div class="check-item"><span class="indicator">✗</span> preflight error: ${err.message}</div>`;
+  }
+}
+
+// 7. 启动器视图 (Run / Stop / Restart / Open + 设置)
+function initLauncherView() {
   const portInput = document.getElementById('web-port-input');
   const autoOpenCheck = document.getElementById('web-auto-open');
-
-  if (btnRecheck) {
-    btnRecheck.addEventListener('click', async () => {
-      await runPreflightCheck();
-    });
-  }
-
-  if (btnPrepare) {
-    btnPrepare.addEventListener('click', async () => {
-      const ok = confirm('将执行 pnpm install && pnpm run build，这可能需要几分钟，是否继续？');
-      if (!ok) return;
-      btnPrepare.disabled = true;
-      try {
-        const res = await window.cockpit.web.prepare();
-        if (res.ok) {
-          alert('依赖安装与编译完成！');
-        } else {
-          alert(`编译失败: ${res.stderr || '请查看终端日志'}`);
-        }
-        await runPreflightCheck();
-      } finally {
-        btnPrepare.disabled = false;
-      }
-    });
-  }
+  const btnRun = document.getElementById('btn-run-main');
+  const btnStop = document.getElementById('btn-stop-main');
+  const btnRestart = document.getElementById('btn-restart-main');
+  const btnOpen = document.getElementById('btn-open-main');
 
   if (portInput) {
     portInput.addEventListener('change', async () => {
       const val = parseInt(portInput.value, 10);
       if (val >= 1024 && val <= 65535) {
-        await window.cockpit.config.save({ web: { port: val, autoOpenBrowser: autoOpenCheck ? autoOpenCheck.checked : true } });
+        await window.cockpit.config.save({
+          web: { port: val, autoOpenBrowser: autoOpenCheck ? autoOpenCheck.checked : true }
+        });
+        // 同步启动器显示
+        const cmdPort = document.getElementById('launcher-cmd-port');
+        const stMeta = document.getElementById('launcher-status-meta');
+        if (cmdPort) cmdPort.textContent = String(val);
+        if (stMeta) stMeta.textContent = `port :${val}`;
       }
     });
   }
@@ -346,16 +446,18 @@ function initWebView() {
   if (autoOpenCheck) {
     autoOpenCheck.addEventListener('change', async () => {
       const portVal = portInput ? parseInt(portInput.value, 10) : 3080;
-      await window.cockpit.config.save({ web: { port: portVal, autoOpenBrowser: autoOpenCheck.checked } });
+      await window.cockpit.config.save({
+        web: { port: portVal, autoOpenBrowser: autoOpenCheck.checked }
+      });
     });
   }
 
-  if (btnStart) {
-    btnStart.addEventListener('click', async () => {
+  if (btnRun) {
+    btnRun.addEventListener('click', async () => {
       const port = portInput ? parseInt(portInput.value, 10) : 3080;
-      updateWebUIState({ state: 'starting', port, url: null });
+      updateLauncherUIState({ state: 'starting', port, url: null });
       const res = await window.cockpit.web.start(port);
-      if (res.state === 'failed') {
+      if (res && res.state === 'failed') {
         alert(`启动失败: ${res.error || '端口可能被占用或编译产物缺失'}`);
       }
     });
@@ -370,7 +472,7 @@ function initWebView() {
   if (btnRestart) {
     btnRestart.addEventListener('click', async () => {
       const port = portInput ? parseInt(portInput.value, 10) : 3080;
-      updateWebUIState({ state: 'starting', port, url: null });
+      updateLauncherUIState({ state: 'starting', port, url: null });
       await window.cockpit.web.restart(port);
     });
   }
@@ -384,27 +486,7 @@ function initWebView() {
   }
 }
 
-async function runPreflightCheck() {
-  const container = document.getElementById('preflight-list');
-  if (!container) return;
-
-  try {
-    const res = await window.cockpit.web.preflight();
-    let html = '';
-
-    html += `<div class="check-item"><span class="indicator">${res.nodeOk ? '✅' : '❌'}</span> Node.js 环境: ${res.nodeVersion || '未找到'}</div>`;
-    html += `<div class="check-item"><span class="indicator">${res.pnpmOk ? '✅' : '❌'}</span> pnpm 包管理器: ${res.pnpmVersion || '未找到'}</div>`;
-    html += `<div class="check-item"><span class="indicator">${res.repoValid ? '✅' : '❌'}</span> Harness 代码库路径有效性</div>`;
-    html += `<div class="check-item"><span class="indicator">${res.depsInstalled ? '✅' : '⚠️'}</span> node_modules 依赖安装状态</div>`;
-    html += `<div class="check-item"><span class="indicator">${res.buildArtifactsExist ? '✅' : '⚠️'}</span> Web 编译产物就绪状态</div>`;
-
-    container.innerHTML = html;
-  } catch (err) {
-    container.innerHTML = `<div class="check-item"><span class="indicator">❌</span> 检测发生异常: ${err.message}</div>`;
-  }
-}
-
-// 7. 插件与补丁视图逻辑
+// 8. 插件与补丁视图
 function initPluginsView() {
   const sourceRadios = document.querySelectorAll('input[name="plugin-source-type"]');
   const groupNpm = document.getElementById('group-npm-spec');
@@ -504,12 +586,12 @@ function initPluginsView() {
         if (res.ok) {
           if (statusBox) {
             statusBox.className = 'alert alert-success';
-            statusBox.textContent = '✅ 补丁验证通过并已安全保存！如果 Web 服务正在运行，请重启 Web 服务使配置生效。';
+            statusBox.textContent = '✓ 补丁验证通过并已安全保存! 重启 Web 服务使配置生效。';
           }
         } else {
           if (statusBox) {
             statusBox.className = 'alert alert-warning';
-            statusBox.textContent = `❌ 补丁校验失败并已自动回滚：\n${res.error || res.dumpOutput || '配置不符合规范'}`;
+            statusBox.textContent = `✗ 补丁校验失败并已自动回滚:\n${res.error || res.dumpOutput || '配置不符合规范'}`;
           }
         }
       } finally {
@@ -518,7 +600,6 @@ function initPluginsView() {
     });
   }
 
-  // 跳转到 DSH 官网（dsh.so/zh）
   const btnOpenWebsite = document.getElementById('btn-open-dsh-website');
   if (btnOpenWebsite) {
     btnOpenWebsite.addEventListener('click', () => {
@@ -527,7 +608,7 @@ function initPluginsView() {
   }
 }
 
-// 8. 插件安装过程可视化控制器
+// 9. 插件安装可视化
 function showPluginInstallModal(targetSpec) {
   const modal = document.getElementById('plugin-install-modal');
   const targetLabel = document.getElementById('modal-target-spec');
@@ -542,7 +623,7 @@ function showPluginInstallModal(targetSpec) {
   if (terminal) terminal.textContent = '';
   if (statusTag) {
     statusTag.textContent = '执行中...';
-    statusTag.style.color = '#38bdf8';
+    statusTag.style.color = '';
   }
   if (resultBanner) {
     resultBanner.style.display = 'none';
@@ -552,7 +633,6 @@ function showPluginInstallModal(targetSpec) {
   if (btnDone) btnDone.style.display = 'none';
   if (btnClose) btnClose.style.display = 'none';
 
-  // 重置步骤状态
   const steps = ['validate', 'backup', 'install', 'finish'];
   steps.forEach(s => {
     const el = document.getElementById(`step-${s}`);
@@ -601,12 +681,12 @@ function finishPluginInstallModal(success, message) {
 
   if (statusTag) {
     statusTag.textContent = success ? '安装成功' : '安装失败';
-    statusTag.style.color = success ? '#10b981' : '#ef4444';
+    statusTag.style.color = '';
   }
 
   if (resultBanner) {
     resultBanner.style.display = 'block';
-    resultBanner.className = `alert ${success ? 'alert-info' : 'alert-warning'}`;
+    resultBanner.className = `alert ${success ? 'alert-success' : 'alert-warning'}`;
     resultBanner.textContent = message;
   }
 }
@@ -636,21 +716,18 @@ async function performInstallWithVisualization(source) {
   if (btnDone) btnDone.onclick = onDoneClick;
   if (btnClose) btnClose.onclick = onDoneClick;
 
-  // Step 1: 来源规范校验
   updateInstallModalStep(1, 'active');
-  appendModalInstallLog(`正在进行来源格式与白名单校验: ${targetSpec} ...`);
+  appendModalInstallLog(`validating source: ${targetSpec} ...`);
   await new Promise(r => setTimeout(r, 200));
   updateInstallModalStep(1, 'completed');
 
-  // Step 2: 环境备份
   updateInstallModalStep(2, 'active');
-  appendModalInstallLog('正在备份当前 Profile 元数据 (package.json, dsh.profile, lockfile) ...');
+  appendModalInstallLog('backing up profile metadata ...');
   await new Promise(r => setTimeout(r, 250));
   updateInstallModalStep(2, 'completed');
 
-  // Step 3: 执行安装
   updateInstallModalStep(3, 'active');
-  appendModalInstallLog(`正在执行: pnpm dsh plugin --profile web add ${targetSpec} ...`);
+  appendModalInstallLog(`running: pnpm dsh plugin --profile web add ${targetSpec} ...`);
 
   let installRes;
   try {
@@ -661,27 +738,26 @@ async function performInstallWithVisualization(source) {
 
   if (installRes.ok) {
     updateInstallModalStep(3, 'completed');
-    // Step 4: 状态同步
     updateInstallModalStep(4, 'active');
-    appendModalInstallLog('正在刷新 Profile 插件图谱与构建脚本状态 ...');
+    appendModalInstallLog('refreshing profile plugin graph ...');
     await new Promise(r => setTimeout(r, 200));
     updateInstallModalStep(4, 'completed');
 
-    finishPluginInstallModal(true, `✅ 插件 ${targetSpec} 安装成功！已写入 web profile。`);
+    finishPluginInstallModal(true, `✓ 插件 ${targetSpec} 安装成功!`);
   } else {
     updateInstallModalStep(3, 'error');
     updateInstallModalStep(4, 'error');
     const rawError = `${installRes.stderr || ''}\n${installRes.stdout || ''}`.trim();
-    appendModalInstallLog(`[ERROR] 插件安装失败: ${rawError || '未知错误'}`);
+    appendModalInstallLog(`[ERROR] install failed: ${rawError || 'unknown'}`);
 
     let userFriendlyMsg = rawError;
     if (rawError.includes('404') || rawError.includes('ERR_PNPM_FETCH_404') || rawError.includes('Not Found') || rawError.includes('pnpm failed')) {
-      userFriendlyMsg = `未在 npm 源中找到指定的包 "${targetSpec}" (404 Not Found)。\n💡 提示：请核对包名拼写（例如确认是否误将 @cordisjs 拼写成了 @cordisis）。`;
+      userFriendlyMsg = `未在 npm 源中找到 "${targetSpec}" (404).\n💡 请核对包名拼写.`;
     } else if (rawError.includes('ETIMEDOUT') || rawError.includes('fetch failed')) {
-      userFriendlyMsg = `网络请求超时，无法从 npm 仓库拉取包 "${targetSpec}"。\n💡 提示：请检查网络连接或 npm 镜像源配置。`;
+      userFriendlyMsg = `网络超时, 无法拉取 "${targetSpec}".\n💡 请检查网络或 npm 镜像源.`;
     }
 
-    finishPluginInstallModal(false, `❌ 插件安装失败：\n${userFriendlyMsg}`);
+    finishPluginInstallModal(false, `✗ 安装失败:\n${userFriendlyMsg}`);
   }
 }
 
@@ -692,7 +768,7 @@ async function refreshPluginsList() {
   try {
     const list = await window.cockpit.plugins.list();
     if (!list || list.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="5" class="empty-hint">当前 web profile 暂无已安装的插件。</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="5" class="empty-hint">当前 web profile 暂无已安装的插件.</td></tr>';
       return;
     }
 
@@ -708,8 +784,8 @@ async function refreshPluginsList() {
           <td>${typeBadge}</td>
           <td>${approveStatus}</td>
           <td>
-            ${!item.isBuiltin ? `<button class="btn btn-text btn-danger" onclick="removePluginAction('${item.name}')">卸载</button>` : '<span style="color:var(--text-dim)">只读</span>'}
-            ${item.buildApproved === false ? `<button class="btn btn-text btn-primary" onclick="approvePluginAction('${item.name}')">授权编译</button>` : ''}
+            ${!item.isBuiltin ? `<button class="btn-text btn-danger" onclick="removePluginAction('${item.name}')">卸载</button>` : '<span style="color:var(--text-dim)">只读</span>'}
+            ${item.buildApproved === false ? `<button class="btn-text" onclick="approvePluginAction('${item.name}')">授权编译</button>` : ''}
           </td>
         </tr>
       `;
@@ -720,11 +796,11 @@ async function refreshPluginsList() {
 }
 
 window.removePluginAction = async function(pkgName) {
-  const ok = confirm(`确认从 web profile 中卸载插件 ${pkgName}？`);
+  const ok = confirm(`确认从 web profile 卸载 ${pkgName} ?`);
   if (!ok) return;
   const res = await window.cockpit.plugins.remove(pkgName);
   if (res.ok) {
-    alert('插件已成功移除');
+    alert('插件已移除');
     await refreshPluginsList();
   } else {
     alert(`卸载失败: ${res.stderr || '未知错误'}`);
@@ -732,11 +808,11 @@ window.removePluginAction = async function(pkgName) {
 };
 
 window.approvePluginAction = async function(pkgName) {
-  const ok = confirm(`确认向插件 ${pkgName} 授权运行 build 脚本？\n注意：只向可信赖的插件授予构建权限。`);
+  const ok = confirm(`向 ${pkgName} 授权运行 build 脚本?\n只向可信赖的插件授予构建权限.`);
   if (!ok) return;
   const res = await window.cockpit.plugins.approveBuilds([pkgName]);
   if (res.ok) {
-    alert('授权成功！');
+    alert('授权成功!');
     await refreshPluginsList();
   } else {
     alert(`授权失败: ${res.stderr || '未知错误'}`);
@@ -755,7 +831,7 @@ async function renderCatalog() {
           <div class="catalog-title">${p.name}</div>
           <div class="catalog-desc">${p.description}</div>
         </div>
-        <button class="btn btn-secondary" onclick="installCatalogPlugin('${p.name}')">一键安装</button>
+        <button class="btn-cmd" onclick="installCatalogPlugin('${p.name}')">[ Install ]</button>
       </div>
     `).join('');
   } catch (err) {
@@ -778,4 +854,3 @@ async function loadPatchContent() {
     editor.value = `# 加载失败: ${err.message}`;
   }
 }
-
