@@ -1,33 +1,36 @@
 /* ============================================================
-   Codex 中性深色主题
-   克制 / 单色为主 / 薄边框 / 信息密度高 / mono 化技术信息
+   Codex Desktop 官方 Light 主题
+   白底 / 灰面 / 黑文 / 薄边框 / mono 化技术信息 / 克制彩色
    ============================================================ */
 
 :root {
-  --bg-base:      #0e1014;
-  --bg-surface:   #161922;
-  --bg-elevated:  #1c2030;
-  --bg-hover:     #232838;
-  --border:       #262a35;
-  --border-strong:#3a3f4d;
-  --text:         #e8eaed;
-  --text-muted:   #8b95a7;
-  --text-dim:     #5c6478;
-  --accent:       #7c9eff;
-  --accent-soft:  rgba(124, 158, 255, 0.12);
-  --success:      #6ad19c;
-  --success-soft: rgba(106, 209, 156, 0.10);
-  --warning:      #d4a96a;
-  --warning-soft: rgba(212, 169, 106, 0.10);
-  --danger:       #d97373;
-  --danger-soft:  rgba(217, 115, 115, 0.10);
+  --bg-base:      #ffffff;
+  --bg-surface:   #f7f7f8;
+  --bg-elevated:  #f0f0f2;
+  --bg-hover:     #e8e8eb;
+  --border:       #e3e3e6;
+  --border-strong:#c9c9cd;
+  --text:         #1a1a1a;
+  --text-muted:   #5a5a5e;
+  --text-dim:     #8b8b8e;
+
+  --accent:       #1a1a1a;
+  --accent-soft:  rgba(26, 26, 26, 0.06);
+  --info:         #1d6fb8;
+  --info-soft:    rgba(29, 111, 184, 0.08);
+  --success:      #1f8a4e;
+  --success-soft: rgba(31, 138, 78, 0.08);
+  --warning:      #a36207;
+  --warning-soft: rgba(163, 98, 7, 0.08);
+  --danger:       #b91c1c;
+  --danger-soft:  rgba(185, 28, 28, 0.08);
 
   --radius-sm:    3px;
   --radius-md:    4px;
   --radius-lg:    6px;
 
-  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --font-mono: "Cascadia Code", "Fira Code", Consolas, Monaco, monospace;
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "JetBrains Mono", "Cascadia Code", "Fira Code", Consolas, Monaco, monospace;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -53,7 +56,8 @@ input, textarea,
 .dirty-list,
 .box-val,
 .data-table td,
-.kv-val {
+.kv-val,
+.logs-body {
   user-select: text !important;
   -webkit-user-select: text !important;
   cursor: text;
@@ -98,7 +102,7 @@ input, textarea,
   align-items: center;
   padding: 0 16px;
   font-size: 11.5px;
-  color: var(--text-dim);
+  color: var(--text-muted);
   font-family: var(--font-mono);
 }
 
@@ -127,7 +131,7 @@ input, textarea,
   font-size: 14px;
   font-weight: 600;
   color: var(--text);
-  letter-spacing: 0.3px;
+  letter-spacing: 0.2px;
 }
 
 .brand-info span {
@@ -165,12 +169,13 @@ input, textarea,
 }
 
 .nav-item.active {
-  background-color: var(--bg-elevated);
+  background-color: var(--bg-base);
   border-color: var(--border);
-  color: var(--accent);
+  color: var(--text);
+  font-weight: 600;
 }
 
-.nav-item .icon { font-size: 14px; opacity: 0.8; }
+.nav-item .icon { font-size: 13px; opacity: 0.7; }
 
 .sidebar-footer {
   padding-top: 12px;
@@ -199,9 +204,7 @@ input, textarea,
   to   { opacity: 1; transform: translateY(0); }
 }
 
-.view-header {
-  margin-bottom: 18px;
-}
+.view-header { margin-bottom: 18px; }
 .view-header h1 { font-size: 18px; font-weight: 600; color: var(--text); }
 .view-desc { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
 .view-header-actions { margin-top: 12px; display: flex; gap: 8px; }
@@ -223,7 +226,7 @@ input, textarea,
   font-size: 14px;
   font-weight: 600;
   color: var(--text);
-  letter-spacing: 0.2px;
+  letter-spacing: 0.1px;
 }
 
 .launcher-status {
@@ -235,9 +238,7 @@ input, textarea,
   gap: 8px;
 }
 
-.launcher-meta {
-  color: var(--text-dim);
-}
+.launcher-meta { color: var(--text-dim); }
 
 /* ============================================================
    命令行展示
@@ -253,14 +254,11 @@ input, textarea,
   background-color: var(--bg-surface);
 }
 
-.cmd-line::before {
-  content: '$ ';
-  color: var(--accent);
-}
+.cmd-line::before { content: '$ '; color: var(--text-dim); }
 
-.cmd-line .cmd-name { color: var(--text); }
+.cmd-line .cmd-name { color: var(--text); font-weight: 600; }
 .cmd-line .cmd-flag { color: var(--text-muted); }
-.cmd-line .cmd-arg  { color: var(--success); }
+.cmd-line .cmd-arg  { color: var(--info); }
 
 /* ============================================================
    命令式按钮 (.btn-cmd)
@@ -280,35 +278,35 @@ input, textarea,
   padding: 6px 14px;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  background: transparent;
-  color: var(--text-muted);
+  background: var(--bg-base);
+  color: var(--text);
   cursor: pointer;
-  transition: border-color 0.12s, color 0.12s, background-color 0.12s;
+  transition: border-color 0.12s, background-color 0.12s;
   white-space: nowrap;
 }
 
 .btn-cmd:hover:not(:disabled) {
   border-color: var(--border-strong);
-  color: var(--text);
   background-color: var(--bg-hover);
 }
 
 .btn-cmd.primary {
   border-color: var(--accent);
-  color: var(--accent);
+  background-color: var(--accent);
+  color: #ffffff;
 }
 .btn-cmd.primary:hover:not(:disabled) {
-  background-color: var(--accent-soft);
-  color: var(--accent);
+  background-color: #000000;
+  border-color: #000000;
 }
 
 .btn-cmd.danger {
   border-color: var(--danger);
+  background-color: var(--bg-base);
   color: var(--danger);
 }
 .btn-cmd.danger:hover:not(:disabled) {
   background-color: var(--danger-soft);
-  color: var(--danger);
 }
 
 .btn-cmd:disabled {
@@ -351,7 +349,7 @@ input, textarea,
 
 .setting-input {
   width: 80px;
-  background-color: var(--bg-elevated);
+  background-color: var(--bg-base);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   color: var(--text);
@@ -378,10 +376,7 @@ input, textarea,
   border-radius: 50%;
   background-color: var(--text-dim);
 }
-.status-dot.running {
-  background-color: var(--success);
-  box-shadow: 0 0 6px rgba(106, 209, 156, 0.5);
-}
+.status-dot.running  { background-color: var(--success); }
 .status-dot.starting { background-color: var(--warning); }
 .status-dot.stopped  { background-color: var(--text-dim); }
 .status-dot.error    { background-color: var(--danger); }
@@ -418,7 +413,7 @@ input, textarea,
 }
 
 .logs-title::before { content: '── '; color: var(--text-dim); }
-.logs-title::after  { content: ' ─────────'; color: var(--border-strong); }
+.logs-title::after  { content: ' ─────────'; color: var(--border); }
 
 .logs-actions { display: flex; gap: 4px; }
 
@@ -431,15 +426,15 @@ input, textarea,
   color: var(--text-muted);
   white-space: pre-wrap;
   word-break: break-all;
-  background-color: #0a0c10;
+  background-color: var(--bg-surface);
 }
 
 .logs-body.collapsed { display: none; }
 
-/* 终端日志样式 (兼容老 id) */
+/* 兼容旧 id */
 .terminal-container {
   margin-top: 0;
-  background-color: #0a0c10;
+  background-color: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   overflow: hidden;
@@ -460,13 +455,13 @@ input, textarea,
   padding: 12px;
   font-family: var(--font-mono);
   font-size: 11.5px;
-  color: var(--success);
+  color: var(--text);
   white-space: pre-wrap;
   word-break: break-all;
 }
 
 /* ============================================================
-   Section / 安装页三段
+   Section / 安装页
    ============================================================ */
 
 .section {
@@ -485,12 +480,9 @@ input, textarea,
   letter-spacing: 0.3px;
 }
 
-.section-title::before {
-  content: '## ';
-  color: var(--accent);
-}
+.section-title::before { content: '## '; color: var(--text-dim); }
 
-/* 兼容旧的 .card 类（在 plugins 模态/表格中可能用到） */
+/* 兼容 .card 类 (插件页用) */
 .card {
   background-color: var(--bg-surface);
   border: 1px solid var(--border);
@@ -505,6 +497,7 @@ input, textarea,
   color: var(--text);
   margin-bottom: 12px;
 }
+
 .card-title-row {
   display: flex;
   justify-content: space-between;
@@ -518,7 +511,6 @@ input, textarea,
   margin-bottom: 12px;
 }
 
-/* KV 网格 (git 信息) */
 .kv-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -527,29 +519,21 @@ input, textarea,
   font-family: var(--font-mono);
   font-size: 12px;
 }
-.kv-key {
-  color: var(--text-dim);
-  margin-right: 8px;
-}
-.kv-val {
-  color: var(--text);
-}
+.kv-key { color: var(--text-dim); margin-right: 8px; }
+.kv-val { color: var(--text); }
 .kv-val.mono { font-family: var(--font-mono); }
 
 /* ============================================================
    表单与输入框
    ============================================================ */
 
-.input-group {
-  display: flex;
-  gap: 8px;
-}
+.input-group { display: flex; gap: 8px; }
 
 input[type="text"],
 input[type="number"],
 textarea {
   flex: 1;
-  background-color: var(--bg-elevated);
+  background-color: var(--bg-base);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   color: var(--text);
@@ -580,7 +564,7 @@ textarea:focus { border-color: var(--accent); }
   flex-wrap: wrap;
 }
 
-/* 兼容旧 .btn 体系 (插件页还在用) */
+/* 兼容旧 .btn 体系 (插件页) */
 .btn {
   display: inline-flex;
   align-items: center;
@@ -589,39 +573,41 @@ textarea:focus { border-color: var(--accent); }
   font-size: 12.5px;
   font-weight: 500;
   border-radius: var(--radius-sm);
-  border: 1px solid transparent;
+  border: 1px solid var(--border);
+  background-color: var(--bg-base);
+  color: var(--text);
   cursor: pointer;
   transition: all 0.12s;
   user-select: none;
   white-space: nowrap;
 }
 .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn:hover:not(:disabled) { background-color: var(--bg-hover); }
 
 .btn-primary {
   background-color: var(--accent);
-  color: #0e1014;
+  border-color: var(--accent);
+  color: #ffffff;
 }
-.btn-primary:hover:not(:disabled) {
-  background-color: #a3baff;
-}
+.btn-primary:hover:not(:disabled) { background-color: #000000; border-color: #000000; }
+
 .btn-secondary {
-  background-color: var(--bg-elevated);
+  background-color: var(--bg-base);
   border-color: var(--border);
   color: var(--text);
 }
-.btn-secondary:hover:not(:disabled) {
-  background-color: var(--bg-hover);
-}
+.btn-secondary:hover:not(:disabled) { background-color: var(--bg-hover); }
+
 .btn-success {
   background-color: var(--success);
-  color: #0e1014;
+  border-color: var(--success);
+  color: #ffffff;
 }
-.btn-success:hover:not(:disabled) { opacity: 0.85; }
 .btn-danger {
   background-color: var(--danger);
-  color: #0e1014;
+  border-color: var(--danger);
+  color: #ffffff;
 }
-.btn-danger:hover:not(:disabled) { opacity: 0.85; }
 
 /* ============================================================
    状态网格 (兼容旧 .status-box 系列)
@@ -635,7 +621,7 @@ textarea:focus { border-color: var(--accent); }
 }
 
 .status-box {
-  background-color: var(--bg-elevated);
+  background-color: var(--bg-surface);
   padding: 10px 12px;
   border-radius: var(--radius-md);
   border: 1px solid var(--border);
@@ -670,6 +656,8 @@ textarea:focus { border-color: var(--accent); }
   margin-bottom: 12px;
   font-size: 12.5px;
   border: 1px solid var(--border);
+  background-color: var(--bg-surface);
+  color: var(--text);
 }
 
 .alert-warning {
@@ -679,9 +667,9 @@ textarea:focus { border-color: var(--accent); }
 }
 
 .alert-info {
-  background-color: var(--accent-soft);
-  border-color: var(--accent);
-  color: var(--accent);
+  background-color: var(--info-soft);
+  border-color: var(--info);
+  color: var(--info);
 }
 
 .alert-success {
@@ -713,16 +701,14 @@ textarea:focus { border-color: var(--accent); }
   align-items: center;
   gap: 8px;
   padding: 6px 10px;
-  background-color: var(--bg-elevated);
+  background-color: var(--bg-surface);
   border-radius: var(--radius-sm);
   font-size: 12.5px;
   font-family: var(--font-mono);
   color: var(--text-muted);
 }
 
-.check-item .indicator {
-  font-size: 12px;
-}
+.check-item .indicator { font-size: 12px; }
 
 /* ============================================================
    子标签页 (插件视图)
@@ -739,7 +725,7 @@ textarea:focus { border-color: var(--accent); }
 .sub-tab-btn {
   background: transparent;
   border: 1px solid transparent;
-  color: var(--text-dim);
+  color: var(--text-muted);
   padding: 5px 12px;
   font-size: 12px;
   font-family: var(--font-mono);
@@ -748,10 +734,11 @@ textarea:focus { border-color: var(--accent); }
   border-radius: var(--radius-sm);
 }
 
-.sub-tab-btn:hover { color: var(--text-muted); }
+.sub-tab-btn:hover { color: var(--text); }
 .sub-tab-btn.active {
-  color: var(--accent);
-  border-color: var(--accent);
+  color: var(--text);
+  border-color: var(--border);
+  background-color: var(--bg-surface);
 }
 
 .subtab-content { display: none; padding: 0 24px; }
@@ -771,6 +758,7 @@ textarea:focus { border-color: var(--accent); }
   width: 100%;
   border-collapse: collapse;
   text-align: left;
+  background-color: var(--bg-base);
 }
 
 .data-table th,
@@ -783,10 +771,10 @@ textarea:focus { border-color: var(--accent); }
 .data-table tr:last-child td { border-bottom: none; }
 
 .data-table th {
-  color: var(--text-dim);
+  color: var(--text-muted);
   font-weight: 500;
   font-family: var(--font-mono);
-  background-color: var(--bg-elevated);
+  background-color: var(--bg-surface);
   text-transform: uppercase;
   font-size: 11px;
   letter-spacing: 0.3px;
@@ -810,7 +798,7 @@ textarea:focus { border-color: var(--accent); }
 }
 
 .catalog-card {
-  background-color: var(--bg-elevated);
+  background-color: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   padding: 14px;
@@ -842,22 +830,25 @@ textarea:focus { border-color: var(--accent); }
   font-size: 10.5px;
   font-weight: 500;
   font-family: var(--font-mono);
+  background-color: var(--bg-elevated);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
 }
 
 .badge-warning {
   background-color: var(--warning-soft);
   color: var(--warning);
-  border: 1px solid var(--warning);
+  border-color: var(--warning);
 }
 .badge-success {
   background-color: var(--success-soft);
   color: var(--success);
-  border: 1px solid var(--success);
+  border-color: var(--success);
 }
 .badge-info {
-  background-color: var(--accent-soft);
-  color: var(--accent);
-  border: 1px solid var(--accent);
+  background-color: var(--info-soft);
+  color: var(--info);
+  border-color: var(--info);
 }
 
 /* ============================================================
@@ -898,7 +889,7 @@ input[type="checkbox"], input[type="radio"] {
 }
 
 .command-preview-box {
-  background-color: #0a0c10;
+  background-color: var(--bg-surface);
   border: 1px solid var(--border);
   padding: 8px 12px;
   border-radius: var(--radius-sm);
@@ -915,13 +906,13 @@ input[type="checkbox"], input[type="radio"] {
 
 .command-preview-box code {
   font-family: var(--font-mono);
-  color: var(--accent);
+  color: var(--text);
   font-size: 12px;
 }
 
 .yaml-editor {
   width: 100%;
-  background-color: #0a0c10;
+  background-color: var(--bg-surface);
   color: var(--text);
   font-family: var(--font-mono);
   font-size: 12.5px;
@@ -942,8 +933,8 @@ input[type="checkbox"], input[type="radio"] {
   position: fixed;
   top: 0; left: 0;
   width: 100vw; height: 100vh;
-  background-color: rgba(0, 0, 0, 0.7);
-  backdrop-filter: blur(3px);
+  background-color: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(2px);
   display: flex;
   justify-content: center;
   align-items: center;
@@ -952,12 +943,12 @@ input[type="checkbox"], input[type="radio"] {
 }
 
 .modal-dialog {
-  background-color: var(--bg-surface);
+  background-color: var(--bg-base);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   width: 620px;
   max-width: 90vw;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -990,7 +981,7 @@ input[type="checkbox"], input[type="radio"] {
 .modal-body { padding: 18px; }
 
 .install-target-banner {
-  background-color: var(--bg-elevated);
+  background-color: var(--bg-surface);
   border: 1px solid var(--border);
   padding: 8px 12px;
   border-radius: var(--radius-sm);
@@ -1003,7 +994,7 @@ input[type="checkbox"], input[type="radio"] {
 .target-label { color: var(--text-dim); font-family: var(--font-mono); }
 .target-name {
   font-weight: 600;
-  color: var(--accent);
+  color: var(--info);
   font-family: var(--font-mono);
 }
 
@@ -1029,7 +1020,7 @@ input[type="checkbox"], input[type="radio"] {
   width: 26px;
   height: 26px;
   border-radius: 50%;
-  background-color: var(--bg-elevated);
+  background-color: var(--bg-base);
   border: 1px solid var(--border);
   color: var(--text-dim);
   display: flex;
@@ -1057,30 +1048,30 @@ input[type="checkbox"], input[type="radio"] {
 }
 
 .step-item.active .step-dot {
-  background-color: var(--accent-soft);
+  background-color: var(--accent);
   border-color: var(--accent);
-  color: var(--accent);
+  color: #ffffff;
 }
-.step-item.active .step-label { color: var(--accent); }
+.step-item.active .step-label { color: var(--text); font-weight: 600; }
 
 .step-item.completed .step-dot {
-  background-color: var(--success-soft);
+  background-color: var(--success);
   border-color: var(--success);
-  color: var(--success);
+  color: #ffffff;
 }
 .step-item.completed .step-label { color: var(--success); }
 
 .step-item.error .step-dot {
-  background-color: var(--danger-soft);
+  background-color: var(--danger);
   border-color: var(--danger);
-  color: var(--danger);
+  color: #ffffff;
 }
 .step-item.error .step-label { color: var(--danger); }
 
 .step-line.completed { background-color: var(--success); }
 
 .modal-terminal-container {
-  background-color: #0a0c10;
+  background-color: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   overflow: hidden;
@@ -1099,7 +1090,7 @@ input[type="checkbox"], input[type="radio"] {
 }
 .terminal-status-tag {
   font-size: 10.5px;
-  color: var(--accent);
+  color: var(--info);
   font-family: var(--font-mono);
 }
 .modal-terminal-body {
@@ -1109,14 +1100,14 @@ input[type="checkbox"], input[type="radio"] {
   font-family: var(--font-mono);
   font-size: 11px;
   line-height: 1.5;
-  color: var(--success);
+  color: var(--text);
   white-space: pre-wrap;
   word-break: break-all;
 }
 
 .modal-footer {
   padding: 12px 18px;
-  background-color: var(--bg-elevated);
+  background-color: var(--bg-surface);
   border-top: 1px solid var(--border);
   display: flex;
   justify-content: space-between;
@@ -1134,7 +1125,7 @@ input[type="checkbox"], input[type="radio"] {
   display: inline-block;
   width: 14px;
   height: 14px;
-  border: 2px solid rgba(255, 255, 255, 0.15);
+  border: 2px solid var(--border);
   border-top-color: var(--accent);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
