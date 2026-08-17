@@ -1,0 +1,6 @@
+node_modules/
+dist/
+*.tmp*
+*.invalid*
+.DS_Store
+Thumbs.db

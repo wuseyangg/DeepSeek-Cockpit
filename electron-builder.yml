@@ -1,0 +1,21 @@
+appId: com.deepseek.cockpit
+productName: DeepSeek Harness Cockpit
+copyright: Copyright © 2026 DeepSeek Cockpit Team
+directories:
+  output: dist
+  buildResources: resources
+files:
+  - "src/**/*"
+  - "resources/**/*"
+  - "package.json"
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: DeepSeek Cockpit

@@ -1,0 +1,26 @@
+{
+  "name": "deepseek-cockpit",
+  "version": "1.0.0",
+  "description": "DeepSeek Harness Windows Desktop Assistant",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test test/*.test.js",
+    "dist": "electron-builder"
+  },
+  "keywords": [
+    "deepseek",
+    "harness",
+    "cockpit",
+    "electron"
+  ],
+  "author": "DeepSeek Cockpit Team",
+  "license": "MIT",
+  "dependencies": {
+    "yaml": "^2.7.0"
+  },
+  "devDependencies": {
+    "electron": "^34.2.0",
+    "electron-builder": "^25.1.8"
+  }
+}

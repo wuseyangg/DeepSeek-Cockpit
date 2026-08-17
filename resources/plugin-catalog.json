@@ -1,0 +1,23 @@
+[
+  {
+    "name": "@cordisjs/plugin-server",
+    "description": "提供基础 HTTP 服务与 WebSocket 支持的官方核心插件",
+    "version": "latest",
+    "category": "core",
+    "verified": true
+  },
+  {
+    "name": "@cordisjs/plugin-console",
+    "description": "提供 Web 控制台界面与实时日志面板的官方核心插件",
+    "version": "latest",
+    "category": "ui",
+    "verified": true
+  },
+  {
+    "name": "@cordisjs/plugin-eval",
+    "description": "提供沙箱代码执行与动态调试环境支持",
+    "version": "latest",
+    "category": "tool",
+    "verified": true
+  }
+]

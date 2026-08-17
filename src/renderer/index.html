@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DeepSeek Harness Cockpit</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-layout">
+    <!-- 侧边导航栏 -->
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-icon">⚡</div>
+        <div class="brand-info">
+          <h2>DeepSeek</h2>
+          <span>Harness Cockpit</span>
+        </div>
+      </div>
+
+      <nav class="nav-menu">
+        <button class="nav-item active" data-tab="repo">
+          <span class="icon">🔄</span>
+          <span class="label">仓库同步</span>
+        </button>
+        <button class="nav-item" data-tab="web">
+          <span class="icon">🚀</span>
+          <span class="label">Web 服务</span>
+        </button>
+        <button class="nav-item" data-tab="plugins">
+          <span class="icon">🧩</span>
+          <span class="label">插件与补丁</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <span class="version-tag">v1.0.0</span>
+      </div>
+    </aside>
+
+    <!-- 主工作区 -->
+    <main class="main-content">
+      <!-- 1. 仓库同步视图 -->
+      <section id="view-repo" class="view-panel active">
+        <div class="view-header">
+          <h1>仓库同步与管理</h1>
+          <p class="view-desc">管理本地 DeepSeek Harness Git 仓库状态，安全进行 Fast-Forward 更新。</p>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Harness 路径设置</div>
+          <div class="input-group">
+            <input type="text" id="repo-path-input" placeholder="请选择或输入本地 deepseek-harness 仓库路径..." readonly>
+            <button id="btn-browse-repo" class="btn btn-secondary">浏览目录</button>
+            <button id="btn-clone-repo" class="btn btn-secondary">在线克隆</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Git 状态看板</div>
+          <div class="repo-status-grid">
+            <div class="status-box">
+              <span class="box-label">当前分支</span>
+              <span class="box-val" id="repo-branch">-</span>
+            </div>
+            <div class="status-box">
+              <span class="box-label">最新提交</span>
+              <span class="box-val commit-hash" id="repo-commit">-</span>
+            </div>
+            <div class="status-box">
+              <span class="box-label">上游跟踪</span>
+              <span class="box-val" id="repo-upstream">-</span>
+            </div>
+            <div class="status-box">
+              <span class="box-label">同步状态</span>
+              <span class="box-val" id="repo-sync-diff">-</span>
+            </div>
+          </div>
+
+          <div id="repo-dirty-warning" class="alert alert-warning" style="display: none;">
+            <strong>⚠️ 工作区存在未提交的修改：</strong>
+            <ul id="repo-dirty-list" class="dirty-list"></ul>
+            <p class="subtext">为了防止数据丢失，存在修改或分叉时已自动阻断同步。请在 Git 中处理后再进行更新。</p>
+          </div>
+
+          <div id="repo-info-banner" class="alert alert-info" style="display: none;"></div>
+
+          <div class="btn-toolbar">
+            <button id="btn-fetch-repo" class="btn btn-secondary">检查更新 (Fetch)</button>
+            <button id="btn-sync-repo" class="btn btn-primary" disabled>安全同步 (Fast-Forward)</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 2. Web 服务视图 -->
+      <section id="view-web" class="view-panel">
+        <div class="view-header">
+          <h1>Harness Web 服务</h1>
+          <p class="view-desc">运行 Web 界面 profile，监控服务运行状态与终端输出。</p>
+        </div>
+
+        <div class="card">
+          <div class="card-title">环境预检与编译</div>
+          <div class="preflight-checklist" id="preflight-list">
+            <div class="check-item"><span class="indicator">⏳</span> 检测环境中...</div>
+          </div>
+          <div class="btn-toolbar">
+            <button id="btn-recheck-preflight" class="btn btn-secondary">重新检测</button>
+            <button id="btn-prepare-harness" class="btn btn-secondary">安装依赖并编译 (pnpm install && build)</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">服务控制台</div>
+          <div class="service-controls">
+            <div class="form-row">
+              <label for="web-port-input">端口号:</label>
+              <input type="number" id="web-port-input" value="3080" min="1024" max="65535" class="input-sm">
+              <label class="checkbox-label">
+                <input type="checkbox" id="web-auto-open" checked> 启动后自动打开浏览器
+              </label>
+            </div>
+            <div class="btn-toolbar">
+              <button id="btn-start-web" class="btn btn-success">启动 Web 服务</button>
+              <button id="btn-stop-web" class="btn btn-danger" disabled>停止服务</button>
+              <button id="btn-restart-web" class="btn btn-secondary" disabled>重启服务</button>
+              <button id="btn-open-browser" class="btn btn-primary" disabled>在浏览器中打开</button>
+            </div>
+          </div>
+
+          <div class="terminal-container">
+            <div class="terminal-header">
+              <span>运行输出日志</span>
+              <button id="btn-clear-logs" class="btn-text">清空</button>
+            </div>
+            <pre id="terminal-logs" class="terminal-body"></pre>
+          </div>
+        </div>
+      </section>
+
+      <!-- 3. 插件与补丁视图 -->
+      <section id="view-plugins" class="view-panel">
+        <div class="view-header">
+          <h1>插件与补丁管理</h1>
+          <p class="view-desc">管理 Web profile 插件生态及安全配置 cordis.patch.yml 补丁。</p>
+        </div>
+
+        <div class="sub-tabs">
+          <button class="sub-tab-btn active" data-subtab="plugins-list">已装插件</button>
+          <button class="sub-tab-btn" data-subtab="plugins-catalog">推荐官方插件</button>
+          <button class="sub-tab-btn" data-subtab="plugins-install">安装自定义插件</button>
+          <button class="sub-tab-btn" data-subtab="patch-editor">编辑 Patch 补丁</button>
+        </div>
+
+        <!-- 3.1 已装插件 -->
+        <div id="subtab-plugins-list" class="subtab-content active">
+          <div class="card">
+            <div class="table-container">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>插件包名</th>
+                    <th>版本</th>
+                    <th>类型</th>
+                    <th>构建审批</th>
+                    <th>操作</th>
+                  </tr>
+                </thead>
+                <tbody id="plugins-table-body">
+                  <tr><td colspan="5" class="empty-hint">暂无安装的插件或加载中...</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="btn-toolbar">
+              <button id="btn-refresh-plugins" class="btn btn-secondary">刷新列表</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3.2 推荐官方插件 -->
+        <div id="subtab-plugins-catalog" class="subtab-content">
+          <div class="card">
+            <div class="catalog-grid" id="catalog-list">
+              <!-- 动态插入推荐卡片 -->
+            </div>
+          </div>
+        </div>
+
+        <!-- 3.3 安装自定义插件 -->
+        <div id="subtab-plugins-install" class="subtab-content">
+          <div class="card">
+            <div class="card-title">安装新插件</div>
+            <div class="form-group">
+              <label>插件来源类型:</label>
+              <div class="radio-group">
+                <label><input type="radio" name="plugin-source-type" value="npm" checked> npm 模块</label>
+                <label><input type="radio" name="plugin-source-type" value="git"> Git 仓库</label>
+                <label><input type="radio" name="plugin-source-type" value="local"> 本地目录</label>
+              </div>
+            </div>
+
+            <div class="form-group" id="group-npm-spec">
+              <label>npm 包名或规范 (如 @cordisjs/plugin-eval@latest):</label>
+              <input type="text" id="input-npm-spec" placeholder="例如: @cordisjs/plugin-eval">
+            </div>
+
+            <div class="form-group" id="group-git-url" style="display: none;">
+              <label>Git HTTPS 地址:</label>
+              <input type="text" id="input-git-url" placeholder="https://github.com/user/plugin-repo.git">
+            </div>
+
+            <div class="form-group" id="group-local-path" style="display: none;">
+              <label>本地插件目录路径:</label>
+              <div class="input-group">
+                <input type="text" id="input-local-path" placeholder="选择包含 package.json 的目录" readonly>
+                <button id="btn-browse-local-plugin" class="btn btn-secondary">选择目录</button>
+              </div>
+            </div>
+
+            <div class="command-preview-box">
+              <span class="preview-label">将执行的命令预览:</span>
+              <code id="install-cmd-preview">pnpm dsh plugin --profile web add ...</code>
+            </div>
+
+            <div class="btn-toolbar">
+              <button id="btn-submit-install-plugin" class="btn btn-primary">确认安装</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3.4 补丁编辑器 -->
+        <div id="subtab-patch-editor" class="subtab-content">
+          <div class="card">
+            <div class="card-title-row">
+              <span class="card-title">cordis.patch.yml 补丁配置</span>
+              <span class="badge badge-warning">高级配置 (修改将影响 Web 实例)</span>
+            </div>
+            <p class="subtext">支持直接修改 web profile 的 cordis.patch.yml。保存时将自动执行 dump-config 校验，若格式或解析失败将自动回滚。</p>
+            
+            <div class="editor-wrapper">
+              <textarea id="patch-yaml-editor" class="yaml-editor" rows="16" spellcheck="false" placeholder="正在加载 patch 内容..."></textarea>
+            </div>
+
+            <div id="patch-validation-status" class="alert" style="display: none;"></div>
+
+            <div class="btn-toolbar">
+              <button id="btn-reload-patch" class="btn btn-secondary">重新加载</button>
+              <button id="btn-save-patch" class="btn btn-primary">验证并保存补丁</button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- 全局底部状态栏 -->
+    <footer class="status-bar">
+      <div class="status-left">
+        <span class="status-item"><strong id="status-repo-label">仓库:</strong> <span id="status-repo-path">未配置</span></span>
+      </div>
+      <div class="status-right">
+        <span class="status-item"><span id="status-web-indicator" class="dot dot-stopped"></span> <span id="status-web-text">Web: 已停止</span></span>
+        <span class="status-item log-indicator" id="status-latest-msg">就绪</span>
+      </div>
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
