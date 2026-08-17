@@ -1,4 +1,7 @@
-﻿<#
+const fs = require('fs');
+const path = require('path');
+
+const script = `<#
 .SYNOPSIS
     DeepSeek Harness Cockpit 一键编译与打包脚本
 .PARAMETER Target
@@ -77,3 +80,7 @@ Get-ChildItem -Path (Join-Path $ProjectRoot "dist") -File -Filter "*.exe" -Recur
     $sizeMb = [math]::Round($_.Length / 1MB, 2)
     Write-Host (" 产物: " + $relPath + " (" + $sizeMb + " MB)") -ForegroundColor Yellow
 }
+`;
+
+fs.writeFileSync(path.join(__dirname, '..', 'build.ps1'), '\uFEFF' + script, { encoding: 'utf8' });
+console.log('Successfully written root build.ps1 with UTF-8 BOM');
