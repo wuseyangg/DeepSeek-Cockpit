@@ -75,7 +75,8 @@ function initLogListener() {
     // 若插件安装模态框正打开且是 plugin/pnpm 相关日志，实时追加
     if (installModal && installModal.style.display !== 'none' && modalTerminal) {
       if (log.source === 'plugin' || log.source === 'pnpm' || log.source === 'system') {
-        modalTerminal.textContent += `[${log.timestamp || new Date().toLocaleTimeString()}] ${log.message}\n`;
+        const ts = log.timestamp || new Date().toLocaleTimeString();
+        modalTerminal.appendChild(document.createTextNode(`[${ts}] ${log.message}\n`));
         modalTerminal.scrollTop = modalTerminal.scrollHeight;
       }
     }
@@ -88,6 +89,21 @@ function initLogListener() {
   if (btnClear) {
     btnClear.addEventListener('click', () => {
       if (terminal) terminal.textContent = '';
+    });
+  }
+
+  const btnCopyModal = document.getElementById('btn-copy-modal-logs');
+  if (btnCopyModal) {
+    btnCopyModal.addEventListener('click', async () => {
+      if (!modalTerminal) return;
+      try {
+        await navigator.clipboard.writeText(modalTerminal.textContent);
+        const original = btnCopyModal.textContent;
+        btnCopyModal.textContent = '已复制';
+        setTimeout(() => { btnCopyModal.textContent = original; }, 1200);
+      } catch (err) {
+        console.error('复制失败:', err);
+      }
     });
   }
 }
@@ -560,7 +576,7 @@ function appendModalInstallLog(line) {
   const terminal = document.getElementById('modal-terminal-logs');
   if (!terminal) return;
   const time = new Date().toLocaleTimeString();
-  terminal.textContent += `[${time}] ${line}\n`;
+  terminal.appendChild(document.createTextNode(`[${time}] ${line}\n`));
   terminal.scrollTop = terminal.scrollHeight;
 }
 

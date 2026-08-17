@@ -39,6 +39,24 @@ body {
   overflow: hidden;
 }
 
+/* 允许文本选中复制的区域 */
+.terminal-body,
+.modal-terminal-body,
+pre,
+code,
+.alert,
+input,
+textarea,
+.yaml-editor,
+.target-name,
+.dirty-list,
+.box-val,
+.data-table td {
+  user-select: text !important;
+  -webkit-user-select: text !important;
+  cursor: text;
+}
+
 .app-layout {
   display: flex;
   height: 100vh;
