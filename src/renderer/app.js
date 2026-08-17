@@ -517,6 +517,14 @@ function initPluginsView() {
       }
     });
   }
+
+  // 跳转到 DSH 官网（dsh.so/zh）
+  const btnOpenWebsite = document.getElementById('btn-open-dsh-website');
+  if (btnOpenWebsite) {
+    btnOpenWebsite.addEventListener('click', () => {
+      window.cockpit.web.open('https://www.dsh.so/zh/');
+    });
+  }
 }
 
 // 8. 插件安装过程可视化控制器
