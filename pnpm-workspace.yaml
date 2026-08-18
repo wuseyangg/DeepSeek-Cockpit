@@ -1,2 +1,9 @@
+# pnpm v11+ uses `allowBuilds` (a map of package name to boolean) to allow
+# specific dependencies to run install/build scripts. Packages not listed
+# here are blocked from running scripts by default, which causes
+# `[ERR_PNPM_IGNORED_BUILDS]` during `pnpm install`.
+#
+# electron's `install.js` downloads the native Electron binary to
+# node_modules/electron/dist/, so it must be allowed.
 allowBuilds:
-  electron: set this to true or false
+  electron: true
