@@ -114,7 +114,12 @@ async function addPlugin(config = {}, source, broadcastLog = null) {
   await backupProfileState(config);
 
   if (onLog) onLog(`正在安装插件: ${validated.normalized} ...`, 'stdout');
-  return await runCommand('pnpm', ['dsh', 'plugin', '--profile', 'web', 'add', validated.normalized], {
+  // Git 依赖必须带 -w / --workspace-root，否则 pnpm 11+ 会报 ERR_PNPM_ADDING_TO_ROOT 拒绝把
+  // 依赖写入 dsh profile 的 workspace 根目录。npm 和本地目录走 pnpm 自身的解析，不受影响。
+  const addArgs = ['dsh', 'plugin', '--profile', 'web', 'add'];
+  if (source.kind === 'git') addArgs.push('-w');
+  addArgs.push(validated.normalized);
+  return await runCommand('pnpm', addArgs, {
     cwd: hPath,
     onLog
   });
@@ -152,9 +157,17 @@ async function updatePlugin(config = {}, packageName, broadcastLog = null) {
   });
 }
 
-async function approveBuilds(config = {}, packageNames = [], broadcastLog = null) {
+async function approveBuilds(config = {}, packageNames = [], allowBuildKeys = [], broadcastLog = null) {
   const onLog = broadcastLog ? (line, type) => broadcastLog(type === 'stderr' ? 'warn' : 'info', line, 'pnpm') : null;
   const profileDir = resolveProfileDir(config, 'web');
+
+  // git-tarball key 路径：pnpm approve-builds 只接受纯包名，遇到
+  // `dshmarket@https://codeload.github.com/.../tar.gz/<sha>` 这种 key 时无法落盘，
+  // 因此直接对 pnpm-workspace.yaml 做原子补丁，把 key 写到 allowBuilds 段。
+  if (Array.isArray(allowBuildKeys) && allowBuildKeys.length > 0) {
+    return await patchAllowBuilds(profileDir, allowBuildKeys, onLog);
+  }
+
   if (!packageNames || packageNames.length === 0) {
     return { ok: true };
   }
@@ -164,6 +177,39 @@ async function approveBuilds(config = {}, packageNames = [], broadcastLog = null
     cwd: profileDir,
     onLog
   });
+}
+
+async function patchAllowBuilds(profileDir, keys, onLog) {
+  const workspacePath = path.join(profileDir, 'pnpm-workspace.yaml');
+  let ws = {};
+  try {
+    const data = await fs.readFile(workspacePath, 'utf8');
+    ws = YAML.parse(data) || {};
+  } catch (err) {
+    if (err && err.code === 'ENOENT') {
+      ws = {};
+    } else {
+      return { ok: false, stderr: `读取 pnpm-workspace.yaml 失败: ${err.message}` };
+    }
+  }
+
+  const existing = (ws.allowBuilds && typeof ws.allowBuilds === 'object') ? { ...ws.allowBuilds } : {};
+  for (const key of keys) {
+    existing[key] = true;
+  }
+  ws.allowBuilds = existing;
+
+  const serialized = YAML.stringify(ws);
+  const tmpPath = `${workspacePath}.tmp.${Date.now()}`;
+  try {
+    await fs.writeFile(tmpPath, serialized, 'utf8');
+    await fs.rename(tmpPath, workspacePath);
+  } catch (err) {
+    return { ok: false, stderr: `写入 pnpm-workspace.yaml 失败: ${err.message}` };
+  }
+
+  if (onLog) onLog(`已写入 allowBuilds: ${keys.join(', ')}`, 'stdout');
+  return { ok: true };
 }
 
 async function loadPatch(config = {}) {

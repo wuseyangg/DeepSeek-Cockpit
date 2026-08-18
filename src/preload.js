@@ -31,7 +31,14 @@ contextBridge.exposeInMainWorld('cockpit', {
     remove: (packageName) => ipcRenderer.invoke('plugins:remove', { packageName }),
     update: (packageName) => ipcRenderer.invoke('plugins:update', { packageName }),
     replace: (packageName, source) => ipcRenderer.invoke('plugins:replace', { packageName, source }),
-    approveBuilds: (packageNames) => ipcRenderer.invoke('plugins:approve-builds', { packageNames }),
+    approveBuilds: (args) => {
+      // 向后兼容：旧调用方传 string[]（纯包名），新调用方传 { packageNames, allowBuildKeys }。
+      if (Array.isArray(args)) {
+        return ipcRenderer.invoke('plugins:approve-builds', { packageNames: args, allowBuildKeys: [] });
+      }
+      const { packageNames = [], allowBuildKeys = [] } = args || {};
+      return ipcRenderer.invoke('plugins:approve-builds', { packageNames, allowBuildKeys });
+    },
     loadPatch: () => ipcRenderer.invoke('plugins:load-patch'),
     savePatch: (yamlText) => ipcRenderer.invoke('plugins:save-patch', { yamlText })
   },

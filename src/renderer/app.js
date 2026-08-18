@@ -506,9 +506,16 @@ function initPluginsView() {
     const selected = document.querySelector('input[name="plugin-source-type"]:checked')?.value;
     let target = '';
     if (selected === 'npm') target = inputNpm?.value.trim() || '<package-name>';
-    if (selected === 'git') target = inputGit?.value.trim() || '<git-url>';
+    if (selected === 'git') {
+      const rawGit = inputGit?.value.trim() || '<git-url>';
+      // 与 services/plugin-source.js 的规范化保持一致：裸 https:// 自动加 git+ 前缀，
+      // 让用户在预览中看到真正会被执行的命令形式。
+      target = rawGit.startsWith('https://') ? `git+${rawGit}` : rawGit;
+    }
     if (selected === 'local') target = inputLocal?.value.trim() || '<directory-path>';
-    if (cmdPreview) cmdPreview.textContent = `pnpm dsh plugin --profile web add ${target}`;
+    // git 模式必须带 -w / --workspace-root，否则 pnpm 11+ 会因 ERR_PNPM_ADDING_TO_ROOT 拒绝写入
+    const prefix = selected === 'git' ? '-w ' : '';
+    if (cmdPreview) cmdPreview.textContent = `pnpm dsh plugin --profile web add ${prefix}${target}`;
   }
 
   sourceRadios.forEach(radio => {
@@ -618,6 +625,7 @@ function showPluginInstallModal(targetSpec) {
   const loadingInfo = document.getElementById('modal-loading-info');
   const btnDone = document.getElementById('btn-modal-done');
   const btnClose = document.getElementById('btn-close-install-modal');
+  const btnApproveRetry = document.getElementById('btn-modal-approve-retry');
 
   if (targetLabel) targetLabel.textContent = targetSpec;
   if (terminal) terminal.textContent = '';
@@ -632,6 +640,10 @@ function showPluginInstallModal(targetSpec) {
   if (loadingInfo) loadingInfo.style.display = 'flex';
   if (btnDone) btnDone.style.display = 'none';
   if (btnClose) btnClose.style.display = 'none';
+  if (btnApproveRetry) {
+    btnApproveRetry.style.display = 'none';
+    btnApproveRetry.onclick = null;
+  }
 
   const steps = ['validate', 'backup', 'install', 'finish'];
   steps.forEach(s => {
@@ -674,10 +686,12 @@ function finishPluginInstallModal(success, message) {
   const loadingInfo = document.getElementById('modal-loading-info');
   const btnDone = document.getElementById('btn-modal-done');
   const btnClose = document.getElementById('btn-close-install-modal');
+  const btnApproveRetry = document.getElementById('btn-modal-approve-retry');
 
   if (loadingInfo) loadingInfo.style.display = 'none';
   if (btnDone) btnDone.style.display = 'inline-flex';
   if (btnClose) btnClose.style.display = 'inline-block';
+  if (btnApproveRetry) btnApproveRetry.style.display = 'none';
 
   if (statusTag) {
     statusTag.textContent = success ? '安装成功' : '安装失败';
@@ -689,6 +703,20 @@ function finishPluginInstallModal(success, message) {
     resultBanner.className = `alert ${success ? 'alert-success' : 'alert-warning'}`;
     resultBanner.textContent = message;
   }
+}
+
+// 从 pnpm / dsh plugin 的报错里提取需要写入 allowBuilds 的 key（git-tarball 形式）。
+// pnpm 11 在错误信息中给出的形如：
+//   dshmarket@https://codeload.github.com/dsh-market/dsh-market/tar.gz/<sha>: true
+function extractAllowBuildsKey(rawError) {
+  if (!rawError) return null;
+  // 先匹配 codeload 形式（git-tarball 场景最常见）
+  const codeload = /([^\s:]+@https:\/\/codeload\.github\.com\/[^\s:]+):\s*true/i.exec(rawError);
+  if (codeload) return codeload[1];
+  // 兜底：泛化匹配 <name>@<url>: true
+  const generic = /^([^\s:]+@[^\s:]+):\s*true/im.exec(rawError);
+  if (generic) return generic[1];
+  return null;
 }
 
 function closePluginInstallModal() {
@@ -751,13 +779,69 @@ async function performInstallWithVisualization(source) {
     appendModalInstallLog(`[错误] 安装失败: ${rawError || '未知错误'}`);
 
     let userFriendlyMsg = rawError;
-    if (rawError.includes('404') || rawError.includes('ERR_PNPM_FETCH_404') || rawError.includes('Not Found') || rawError.includes('pnpm failed')) {
+    let extractedKey = null;
+    if (source && source.kind === 'git') {
+      // pnpm 11+ 默认拦截 git 依赖的构建脚本（prepare / postinstall），要求先在 allowBuilds 中放行。
+      // 这是已知流程，dsh plugin 已经把需要写入 allowBuilds 的 key 打印到 stderr。
+      if (rawError.includes('allowBuilds') || rawError.includes('PREPARE_PACKAGE') || rawError.includes('IGNORED_BUILDS')) {
+        extractedKey = extractAllowBuildsKey(rawError);
+        if (extractedKey) {
+          userFriendlyMsg = `Git 插件 "${targetSpec}" 已下载，但 pnpm 11 默认拦截其构建脚本.\n💡 检测到需要写入 allowBuilds 的 key:\n   ${extractedKey}\n点击下方「一键授权并重试」可直接写入 pnpm-workspace.yaml 并自动重投安装。`;
+        } else {
+          userFriendlyMsg = `Git 插件 "${targetSpec}" 已下载，但 pnpm 11 默认拦截其构建脚本.\n💡 请到「已装插件」列表中点击该插件的「授权编译」按钮，然后重新执行安装。\n\n原始错误:\n${rawError}`;
+        }
+      } else {
+        userFriendlyMsg = `无法通过 Git 安装 "${targetSpec}".\n💡 请确认仓库地址存在、可公开访问，且根目录包含有效的 package.json.\n\n原始错误:\n${rawError}`;
+      }
+    } else if (rawError.includes('404') || rawError.includes('ERR_PNPM_FETCH_404') || rawError.includes('Not Found') || rawError.includes('pnpm failed')) {
       userFriendlyMsg = `未在 npm 源中找到 "${targetSpec}" (404).\n💡 请核对包名拼写.`;
     } else if (rawError.includes('ETIMEDOUT') || rawError.includes('fetch failed')) {
       userFriendlyMsg = `网络超时, 无法拉取 "${targetSpec}".\n💡 请检查网络或 npm 镜像源.`;
     }
 
     finishPluginInstallModal(false, `✗ 安装失败:\n${userFriendlyMsg}`);
+
+    // 仅当 key 提取成功才提供一键重试按钮
+    if (extractedKey) {
+      const btnApproveRetry = document.getElementById('btn-modal-approve-retry');
+      const loadingInfo = document.getElementById('modal-loading-info');
+      const loadingText = document.getElementById('modal-loading-text');
+      const btnDoneLocal = document.getElementById('btn-modal-done');
+      if (btnApproveRetry) {
+        btnApproveRetry.style.display = 'inline-flex';
+        btnApproveRetry.disabled = false;
+        btnApproveRetry.onclick = async () => {
+          btnApproveRetry.disabled = true;
+          if (btnDoneLocal) btnDoneLocal.style.display = 'none';
+          if (loadingInfo) loadingInfo.style.display = 'flex';
+          if (loadingText) loadingText.textContent = '正在写入 allowBuilds 并重试安装 ...';
+          appendModalInstallLog(`正在写入 allowBuilds: ${extractedKey}`);
+
+          const approveRes = await window.cockpit.plugins.approveBuilds({ allowBuildKeys: [extractedKey] });
+          if (!approveRes || !approveRes.ok) {
+            const errText = (approveRes && approveRes.stderr) || '未知错误';
+            appendModalInstallLog(`[错误] 写入 allowBuilds 失败: ${errText}`);
+            finishPluginInstallModal(false, `✗ 写入 allowBuilds 失败:\n${errText}`);
+            return;
+          }
+          appendModalInstallLog('allowBuilds 写入成功, 重新执行安装 ...');
+
+          let retryRes;
+          try {
+            retryRes = await window.cockpit.plugins.add(source);
+          } catch (err) {
+            retryRes = { ok: false, stderr: err.message };
+          }
+          if (retryRes.ok) {
+            finishPluginInstallModal(true, `✓ 插件 ${targetSpec} 安装成功!`);
+          } else {
+            const retryRaw = `${retryRes.stderr || ''}\n${retryRes.stdout || ''}`.trim();
+            appendModalInstallLog(`[错误] 重试仍失败: ${retryRaw || '未知错误'}`);
+            finishPluginInstallModal(false, `✗ 重试安装失败:\n${retryRaw}`);
+          }
+        };
+      }
+    }
   }
 }
 

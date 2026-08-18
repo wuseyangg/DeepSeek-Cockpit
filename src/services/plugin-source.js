@@ -44,7 +44,10 @@ async function validateAndNormalizeSource(source) {
     if (/[\s;`$|&><\r\n\t]/.test(url)) {
       return { valid: false, error: 'Git 地址包含非法字符' };
     }
-    return { valid: true, normalized: url };
+    // pnpm / dsh plugin add 无法把裸 https:// 识别为 git 依赖，会按 npm 包名或 tarball 处理并报 404。
+    // 规范化时统一加 git+ 前缀，确保下游能正确解析为 git 源。
+    const normalized = url.startsWith('https://') ? `git+${url}` : url;
+    return { valid: true, normalized };
   }
 
   if (source.kind === 'local') {

@@ -34,6 +34,28 @@ test('PluginSource - git sources validation', async () => {
   assert.equal(gitInvalid.valid, false);
 });
 
+test('PluginSource - git URL normalization prepends git+ for bare https', async () => {
+  // 裸 https:// 应当规范化为 git+https://，避免 pnpm/dsh 把它当 npm 包名或 tarball 处理导致 404。
+  const r1 = await validateAndNormalizeSource({ kind: 'git', url: 'https://github.com/dsh-market/dsh-market.git' });
+  assert.equal(r1.valid, true);
+  assert.equal(r1.normalized, 'git+https://github.com/dsh-market/dsh-market.git');
+
+  // 没有 .git 后缀的 https URL 同样应被规范化（pnpm 仍可识别）。
+  const r2 = await validateAndNormalizeSource({ kind: 'git', url: 'https://github.com/owner/repo' });
+  assert.equal(r2.valid, true);
+  assert.equal(r2.normalized, 'git+https://github.com/owner/repo');
+
+  // 已经带 git+ 前缀的 URL 不应被重复添加。
+  const r3 = await validateAndNormalizeSource({ kind: 'git', url: 'git+https://github.com/owner/repo.git' });
+  assert.equal(r3.valid, true);
+  assert.equal(r3.normalized, 'git+https://github.com/owner/repo.git');
+
+  // github: shorthand 保持不变。
+  const r4 = await validateAndNormalizeSource({ kind: 'git', url: 'github:owner/repo' });
+  assert.equal(r4.valid, true);
+  assert.equal(r4.normalized, 'github:owner/repo');
+});
+
 test('PluginSource - local directory source validation', async () => {
   const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'cockpit-local-pkg-'));
   

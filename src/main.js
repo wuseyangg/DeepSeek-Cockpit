@@ -280,10 +280,10 @@ function setupIpcHandlers() {
     return { ok: false, stderr: '插件服务不可用' };
   });
 
-  ipcMain.handle('plugins:approve-builds', async (_event, { packageNames }) => {
+  ipcMain.handle('plugins:approve-builds', async (_event, { packageNames = [], allowBuildKeys = [] } = {}) => {
     if (profileService && configStore) {
       const cfg = await configStore.loadConfig();
-      return await profileService.approveBuilds(cfg, packageNames, broadcastLog);
+      return await profileService.approveBuilds(cfg, packageNames, allowBuildKeys, broadcastLog);
     }
     return { ok: false, stderr: '插件服务不可用' };
   });
