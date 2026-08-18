@@ -55,6 +55,26 @@ pnpm run build            # 同时生成安装包与便携版
 
 ---
 
+## 📸 界面预览
+
+### 启动器：Web 服务生命周期托管
+
+![启动器：dsh web 服务启停与日志面板](docs/Images/1.png)
+
+### Harness 服务安装与 Git 快进同步
+
+![Harness 路径、Git FF 同步、环境预检](docs/Images/2.png)
+
+### 插件与补丁
+
+![已装插件列表：支持 link / Package 多源](docs/Images/3.png)
+
+![推荐官方插件：@cordisjs 核心插件](docs/Images/4.png)
+
+![安装自定义插件：npm / Git 仓库 / 本地目录](docs/Images/5.png)
+
+---
+
 ## 📂 项目结构说明
 
 ```
