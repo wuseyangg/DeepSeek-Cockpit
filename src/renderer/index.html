@@ -20,16 +20,13 @@
 
       <nav class="nav-menu">
         <button class="nav-item active" data-tab="launcher">
-          <span class="icon">▶</span>
-          <span class="label">启动器</span>
+          <span class="label">启动管理</span>
         </button>
         <button class="nav-item" data-tab="install">
-          <span class="icon">◆</span>
-          <span class="label">Harness服务安装</span>
+          <span class="label">服务安装</span>
         </button>
         <button class="nav-item" data-tab="plugins">
-          <span class="icon">◇</span>
-          <span class="label">插件与补丁</span>
+          <span class="label">插件管理</span>
         </button>
       </nav>
 
@@ -41,11 +38,11 @@
     <!-- 主工作区 -->
     <main class="main-content">
 
-      <!-- 1. 启动器 (默认首页) -->
+      <!-- 1. 启动管理 (默认首页) -->
       <section id="view-launcher" class="view-panel active">
 
         <header class="launcher-topbar">
-          <div class="launcher-title">DeepSeek Harness 启动器</div>
+          <div class="launcher-title">启动管理</div>
           <div class="launcher-status">
             <span id="launcher-status-dot" class="status-dot stopped"></span>
             <span id="launcher-status-text">已停止</span>
@@ -81,11 +78,11 @@
         </div>
       </section>
 
-      <!-- 2. Harness 服务安装 -->
+      <!-- 2. 服务安装 -->
       <section id="view-install" class="view-panel">
 
         <header class="launcher-topbar">
-          <div class="launcher-title">Harness 服务安装</div>
+          <div class="launcher-title">服务安装</div>
           <div class="launcher-status">
             <span class="launcher-meta" id="install-repo-path">未配置路径</span>
           </div>
@@ -147,10 +144,10 @@
         </div>
       </section>
 
-      <!-- 3. 插件与补丁 -->
+      <!-- 3. 插件管理 -->
       <section id="view-plugins" class="view-panel">
         <header class="launcher-topbar">
-          <div class="launcher-title">插件与补丁</div>
+          <div class="launcher-title">插件管理</div>
           <div class="launcher-status">
             <button id="btn-open-dsh-website" class="btn-cmd">dsh.so/zh ↗</button>
           </div>
@@ -158,9 +155,8 @@
 
         <div class="sub-tabs">
           <button class="sub-tab-btn active" data-subtab="plugins-list">已装插件</button>
-          <button class="sub-tab-btn" data-subtab="plugins-catalog">推荐官方插件</button>
+          <button class="sub-tab-btn" data-subtab="plugins-catalog">插件市场</button>
           <button class="sub-tab-btn" data-subtab="plugins-install">安装自定义插件</button>
-          <button class="sub-tab-btn" data-subtab="patch-editor">编辑 Patch 补丁</button>
         </div>
 
         <div id="subtab-plugins-list" class="subtab-content active">
@@ -188,8 +184,40 @@
         </div>
 
         <div id="subtab-plugins-catalog" class="subtab-content">
-          <div class="card">
+          <div class="card market-card">
+            <!-- 分类筛选栏 -->
+            <div class="market-categories-bar">
+              <div class="market-categories-label">分类:</div>
+              <div class="market-categories-list" id="market-categories-list">
+                <button class="category-chip active" data-category="all">全部</button>
+              </div>
+            </div>
+
+            <!-- 搜索与排序工具栏 -->
+            <div class="market-toolbar">
+              <div class="market-search-box">
+                <input type="text" id="market-search-input" placeholder="搜索插件名称、描述或作者..." autocomplete="off">
+                <button id="btn-market-clear-search" class="market-clear-btn" style="display: none;">✕</button>
+              </div>
+              <div class="market-controls">
+                <select id="market-sort-select" class="market-sort-select">
+                  <option value="stars">按热度 (Stars 降序)</option>
+                  <option value="added">按收录时间 (最新优先)</option>
+                  <option value="name">按名称 (A-Z)</option>
+                </select>
+                <span id="market-count-info" class="market-count-info">共 0 个插件</span>
+              </div>
+            </div>
+
+            <!-- 插件列表网格 -->
             <div class="catalog-grid" id="catalog-list"></div>
+
+            <!-- 极简分页栏 -->
+            <div class="market-pagination" id="market-pagination">
+              <button id="btn-market-prev" class="btn-cmd btn-sm">&lt; 上一页</button>
+              <span id="market-page-indicator" class="market-page-indicator">第 1 / 1 页</span>
+              <button id="btn-market-next" class="btn-cmd btn-sm">下一页 &gt;</button>
+            </div>
           </div>
         </div>
 
@@ -230,27 +258,6 @@
 
             <div class="btn-toolbar">
               <button id="btn-submit-install-plugin" class="btn-cmd primary">[ 确认安装 ]</button>
-            </div>
-          </div>
-        </div>
-
-        <div id="subtab-patch-editor" class="subtab-content">
-          <div class="card">
-            <div class="card-title-row">
-              <span class="card-title">cordis.patch.yml</span>
-              <span class="badge badge-warning">高级</span>
-            </div>
-            <p class="subtext">直接修改 web profile 的 cordis.patch.yml。保存时自动 dump-config 校验，失败则回滚。</p>
-
-            <div class="editor-wrapper">
-              <textarea id="patch-yaml-editor" class="yaml-editor" rows="16" spellcheck="false" placeholder="正在加载 patch 内容..."></textarea>
-            </div>
-
-            <div id="patch-validation-status" class="alert" style="display: none;"></div>
-
-            <div class="btn-toolbar">
-              <button id="btn-reload-patch" class="btn-cmd">[ 重新加载 ]</button>
-              <button id="btn-save-patch" class="btn-cmd primary">[ 验证并保存 ]</button>
             </div>
           </div>
         </div>

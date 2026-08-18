@@ -52,9 +52,7 @@ function initSubTabs() {
         targetContent.classList.add('active');
       }
 
-      if (subtab === 'patch-editor') {
-        loadPatchContent();
-      } else if (subtab === 'plugins-catalog') {
+      if (subtab === 'plugins-catalog') {
         renderCatalog();
       }
     });
@@ -499,8 +497,6 @@ function initPluginsView() {
   const cmdPreview = document.getElementById('install-cmd-preview');
   const btnSubmit = document.getElementById('btn-submit-install-plugin');
   const btnRefresh = document.getElementById('btn-refresh-plugins');
-  const btnReloadPatch = document.getElementById('btn-reload-patch');
-  const btnSavePatch = document.getElementById('btn-save-patch');
 
   function updatePreview() {
     const selected = document.querySelector('input[name="plugin-source-type"]:checked')?.value;
@@ -568,43 +564,6 @@ function initPluginsView() {
 
   if (btnRefresh) {
     btnRefresh.addEventListener('click', refreshPluginsList);
-  }
-
-  if (btnReloadPatch) {
-    btnReloadPatch.addEventListener('click', loadPatchContent);
-  }
-
-  if (btnSavePatch) {
-    btnSavePatch.addEventListener('click', async () => {
-      const editor = document.getElementById('patch-yaml-editor');
-      const statusBox = document.getElementById('patch-validation-status');
-      if (!editor) return;
-
-      const text = editor.value;
-      btnSavePatch.disabled = true;
-      if (statusBox) {
-        statusBox.style.display = 'block';
-        statusBox.className = 'alert alert-info';
-        statusBox.textContent = '正在执行 YAML 解析与 dump-config 安全校验...';
-      }
-
-      try {
-        const res = await window.cockpit.plugins.savePatch(text);
-        if (res.ok) {
-          if (statusBox) {
-            statusBox.className = 'alert alert-success';
-            statusBox.textContent = '✓ 补丁验证通过并已安全保存! 重启 Web 服务使配置生效。';
-          }
-        } else {
-          if (statusBox) {
-            statusBox.className = 'alert alert-warning';
-            statusBox.textContent = `✗ 补丁校验失败并已自动回滚:\n${res.error || res.dumpOutput || '配置不符合规范'}`;
-          }
-        }
-      } finally {
-        btnSavePatch.disabled = false;
-      }
-    });
   }
 
   const btnOpenWebsite = document.getElementById('btn-open-dsh-website');
@@ -851,6 +810,8 @@ async function refreshPluginsList() {
 
   try {
     const list = await window.cockpit.plugins.list();
+    marketState.installedPluginNames = new Set((list || []).map(item => item.name));
+
     if (!list || list.length === 0) {
       tbody.innerHTML = '<tr><td colspan="5" class="empty-hint">当前 web profile 暂无已安装的插件.</td></tr>';
       return;
@@ -886,6 +847,7 @@ window.removePluginAction = async function(pkgName) {
   if (res.ok) {
     alert('插件已移除');
     await refreshPluginsList();
+    if (marketState.rawCatalog) renderCatalog();
   } else {
     alert(`卸载失败: ${res.stderr || '未知错误'}`);
   }
@@ -903,38 +865,294 @@ window.approvePluginAction = async function(pkgName) {
   }
 };
 
-async function renderCatalog() {
-  const container = document.getElementById('catalog-list');
-  if (!container) return;
+// ============================================================
+// 10. 插件市场与分类管理系统
+// ============================================================
 
-  try {
-    const catalog = await window.cockpit.plugins.getCatalog();
-    container.innerHTML = catalog.map(p => `
-      <div class="catalog-card">
-        <div>
-          <div class="catalog-title">${p.name}</div>
-          <div class="catalog-desc">${p.description}</div>
-        </div>
-        <button class="btn-cmd" onclick="installCatalogPlugin('${p.name}')">[ 安装 ]</button>
-      </div>
-    `).join('');
-  } catch (err) {
-    container.innerHTML = `<div class="empty-hint">加载推荐插件失败</div>`;
+const marketState = {
+  initialized: false,
+  rawCatalog: null,
+  activeCategory: 'all',
+  searchQuery: '',
+  sortBy: 'stars',
+  currentPage: 1,
+  pageSize: 24,
+  installedPluginNames: new Set()
+};
+
+function initMarketControls() {
+  if (marketState.initialized) return;
+  marketState.initialized = true;
+
+  const searchInput = document.getElementById('market-search-input');
+  const clearBtn = document.getElementById('btn-market-clear-search');
+  const sortSelect = document.getElementById('market-sort-select');
+  const prevBtn = document.getElementById('btn-market-prev');
+  const nextBtn = document.getElementById('btn-market-next');
+
+  if (searchInput) {
+    searchInput.addEventListener('input', () => {
+      marketState.searchQuery = searchInput.value.trim().toLowerCase();
+      marketState.currentPage = 1;
+      if (clearBtn) clearBtn.style.display = marketState.searchQuery ? 'block' : 'none';
+      updateMarketView();
+    });
+  }
+
+  if (clearBtn) {
+    clearBtn.addEventListener('click', () => {
+      if (searchInput) searchInput.value = '';
+      marketState.searchQuery = '';
+      marketState.currentPage = 1;
+      clearBtn.style.display = 'none';
+      updateMarketView();
+    });
+  }
+
+  if (sortSelect) {
+    sortSelect.addEventListener('change', () => {
+      marketState.sortBy = sortSelect.value;
+      marketState.currentPage = 1;
+      updateMarketView();
+    });
+  }
+
+  if (prevBtn) {
+    prevBtn.addEventListener('click', () => {
+      if (marketState.currentPage > 1) {
+        marketState.currentPage--;
+        updateMarketView();
+      }
+    });
+  }
+
+  if (nextBtn) {
+    nextBtn.addEventListener('click', () => {
+      marketState.currentPage++;
+      updateMarketView();
+    });
   }
 }
+
+async function renderCatalog(forceReload = false) {
+  const container = document.getElementById('catalog-list');
+  const catList = document.getElementById('market-categories-list');
+  if (!container) return;
+
+  if (!marketState.rawCatalog || forceReload) {
+    try {
+      const data = await window.cockpit.plugins.getCatalog();
+      if (Array.isArray(data)) {
+        marketState.rawCatalog = {
+          name: 'awesome-dsh-plugin',
+          categories: {},
+          plugins: data,
+          count: data.length
+        };
+      } else {
+        marketState.rawCatalog = data || { categories: {}, plugins: [] };
+      }
+
+      try {
+        const list = await window.cockpit.plugins.list();
+        marketState.installedPluginNames = new Set((list || []).map(item => item.name));
+      } catch {
+        marketState.installedPluginNames = new Set();
+      }
+    } catch (err) {
+      container.innerHTML = `<div class="empty-hint">加载插件市场失败: ${err.message}</div>`;
+      return;
+    }
+  }
+
+  const catalog = marketState.rawCatalog || { categories: {}, plugins: [] };
+  const categories = catalog.categories || {};
+  const plugins = catalog.plugins || [];
+
+  const counts = { all: plugins.length };
+  plugins.forEach(p => {
+    const cat = p.category || 'other';
+    counts[cat] = (counts[cat] || 0) + 1;
+  });
+
+  if (catList) {
+    const categoryEntries = Object.entries(categories);
+    let html = `
+      <button class="category-chip ${marketState.activeCategory === 'all' ? 'active' : ''}" data-category="all">
+        全部 <span class="chip-count">(${counts.all || 0})</span>
+      </button>
+    `;
+
+    categoryEntries.forEach(([key, meta]) => {
+      const label = meta.zh || meta.en || key;
+      const count = counts[key] || 0;
+      const isActive = marketState.activeCategory === key ? 'active' : '';
+      html += `
+        <button class="category-chip ${isActive}" data-category="${key}">
+          ${label} <span class="chip-count">(${count})</span>
+        </button>
+      `;
+    });
+
+    catList.innerHTML = html;
+
+    catList.querySelectorAll('.category-chip').forEach(btn => {
+      btn.addEventListener('click', () => {
+        catList.querySelectorAll('.category-chip').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        marketState.activeCategory = btn.dataset.category || 'all';
+        marketState.currentPage = 1;
+        updateMarketView();
+      });
+    });
+  }
+
+  updateMarketView();
+}
+
+function updateMarketView() {
+  const container = document.getElementById('catalog-list');
+  const countInfo = document.getElementById('market-count-info');
+  const prevBtn = document.getElementById('btn-market-prev');
+  const nextBtn = document.getElementById('btn-market-next');
+  const pageIndicator = document.getElementById('market-page-indicator');
+
+  if (!container || !marketState.rawCatalog) return;
+
+  const catalog = marketState.rawCatalog;
+  const categories = catalog.categories || {};
+  const allPlugins = catalog.plugins || [];
+
+  let filtered = allPlugins;
+  if (marketState.activeCategory !== 'all') {
+    filtered = filtered.filter(p => p.category === marketState.activeCategory);
+  }
+
+  const query = marketState.searchQuery;
+  if (query) {
+    filtered = filtered.filter(p => {
+      const name = (p.name || '').toLowerCase();
+      const owner = (p.owner || '').toLowerCase();
+      const npm = (p.npm || '').toLowerCase();
+      const zhDesc = (p.description?.zh || '').toLowerCase();
+      const enDesc = (p.description?.en || '').toLowerCase();
+      return name.includes(query) || owner.includes(query) || npm.includes(query) || zhDesc.includes(query) || enDesc.includes(query);
+    });
+  }
+
+  const sortBy = marketState.sortBy;
+  filtered.sort((a, b) => {
+    if (sortBy === 'stars') {
+      return (b.stars || 0) - (a.stars || 0);
+    }
+    if (sortBy === 'added') {
+      return (b.added || '').localeCompare(a.added || '');
+    }
+    if (sortBy === 'name') {
+      return (a.name || '').localeCompare(b.name || '');
+    }
+    return 0;
+  });
+
+  if (countInfo) {
+    countInfo.textContent = `共 ${filtered.length} 个插件`;
+  }
+
+  if (filtered.length === 0) {
+    container.innerHTML = `<div class="empty-hint" style="grid-column: 1 / -1; padding: 40px 0;">未找到符合条件的插件</div>`;
+    if (pageIndicator) pageIndicator.textContent = '第 1 / 1 页';
+    if (prevBtn) prevBtn.disabled = true;
+    if (nextBtn) nextBtn.disabled = true;
+    return;
+  }
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / marketState.pageSize));
+  if (marketState.currentPage > totalPages) marketState.currentPage = totalPages;
+  if (marketState.currentPage < 1) marketState.currentPage = 1;
+
+  const startIdx = (marketState.currentPage - 1) * marketState.pageSize;
+  const pageItems = filtered.slice(startIdx, startIdx + marketState.pageSize);
+
+  if (pageIndicator) {
+    pageIndicator.textContent = `第 ${marketState.currentPage} / ${totalPages} 页`;
+  }
+  if (prevBtn) prevBtn.disabled = marketState.currentPage <= 1;
+  if (nextBtn) nextBtn.disabled = marketState.currentPage >= totalPages;
+
+  container.innerHTML = pageItems.map(p => {
+    const catLabel = categories[p.category]?.zh || categories[p.category]?.en || p.category || 'plugin';
+    const desc = p.description?.zh || p.description?.en || (typeof p.description === 'string' ? p.description : '暂无详细描述');
+    const starsBadge = p.stars > 0 ? `<span class="badge badge-stars">★ ${p.stars}</span>` : '';
+    const ownerLabel = p.owner ? `<div class="catalog-owner">by ${p.owner}</div>` : '';
+
+    const isInstalled = marketState.installedPluginNames.has(p.npm) ||
+                        marketState.installedPluginNames.has(p.name) ||
+                        (p.owner && marketState.installedPluginNames.has(`github:${p.owner}/${p.name}`));
+
+    let sourcePayload = null;
+    if (p.npm) {
+      sourcePayload = { kind: 'npm', spec: p.npm };
+    } else if (p.url) {
+      sourcePayload = { kind: 'git', url: p.url };
+    } else if (p.owner && p.name) {
+      sourcePayload = { kind: 'git', url: `github:${p.owner}/${p.name}` };
+    } else {
+      sourcePayload = { kind: 'npm', spec: p.name };
+    }
+
+    const payloadStr = encodeURIComponent(JSON.stringify(sourcePayload));
+
+    const links = [];
+    if (p.page) {
+      links.push(`<button class="catalog-link-btn" onclick="openExternalUrl('${p.page}')">主页 ↗</button>`);
+    }
+    if (p.url && p.url !== p.page) {
+      links.push(`<button class="catalog-link-btn" onclick="openExternalUrl('${p.url}')">源码 ↗</button>`);
+    }
+
+    const actionBtn = isInstalled
+      ? `<button class="btn-cmd btn-sm" onclick="installMarketPlugin('${payloadStr}')">[ 重新安装 ]</button>`
+      : `<button class="btn-cmd btn-sm primary" onclick="installMarketPlugin('${payloadStr}')">[ 安装 ]</button>`;
+
+    return `
+      <div class="catalog-card">
+        <div class="catalog-card-header">
+          <div class="catalog-title-group">
+            <div class="catalog-title" title="${p.name}">${p.name}</div>
+            ${ownerLabel}
+          </div>
+          <div class="catalog-card-badges">
+            <span class="badge badge-category">${catLabel}</span>
+            ${starsBadge}
+          </div>
+        </div>
+        <div class="catalog-desc" title="${desc.replace(/"/g, '&quot;')}">${desc}</div>
+        <div class="catalog-card-footer">
+          <div class="catalog-links">
+            ${links.join('')}
+          </div>
+          ${actionBtn}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+window.openExternalUrl = async function(url) {
+  if (url) {
+    await window.cockpit.web.open(url);
+  }
+};
+
+window.installMarketPlugin = async function(encodedPayload) {
+  try {
+    const source = JSON.parse(decodeURIComponent(encodedPayload));
+    await performInstallWithVisualization(source);
+  } catch (err) {
+    alert(`安装参数解析失败: ${err.message}`);
+  }
+};
 
 window.installCatalogPlugin = async function(pkgName) {
   await performInstallWithVisualization({ kind: 'npm', spec: pkgName });
 };
-
-async function loadPatchContent() {
-  const editor = document.getElementById('patch-yaml-editor');
-  if (!editor) return;
-
-  try {
-    const res = await window.cockpit.plugins.loadPatch();
-    editor.value = res.content || '# cordis.patch.yml 暂无内容\n';
-  } catch (err) {
-    editor.value = `# 加载失败: ${err.message}`;
-  }
-}

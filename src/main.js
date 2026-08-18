@@ -237,14 +237,21 @@ function setupIpcHandlers() {
     }
   });
 
-  // 插件与补丁相关
+  // 插件管理相关
   ipcMain.handle('plugins:get-catalog', async () => {
     try {
-      const catalogPath = path.join(__dirname, '../resources/plugin-catalog.json');
-      const data = await fs.readFile(catalogPath, 'utf8');
+      const snapshotPath = path.join(__dirname, '../data/registry-snapshot.json');
+      const data = await fs.readFile(snapshotPath, 'utf8');
       return JSON.parse(data);
     } catch {
-      return [];
+      try {
+        const catalogPath = path.join(__dirname, '../resources/plugin-catalog.json');
+        const data = await fs.readFile(catalogPath, 'utf8');
+        const list = JSON.parse(data);
+        return { categories: {}, plugins: Array.isArray(list) ? list : [] };
+      } catch {
+        return { categories: {}, plugins: [] };
+      }
     }
   });
 

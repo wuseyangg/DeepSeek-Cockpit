@@ -15,10 +15,10 @@
   - 显式安装与构建 (`pnpm install && pnpm run build`)；
   - 一键运行 Web profile (`pnpm dsh web --port <port>`)，原生 HTTP 探活与默认浏览器直调；
   - 应用关闭时自动递归清理子进程树，杜绝孤儿后台进程。
-- **插件与补丁治理**:
+- **插件管理**:
+  - 800+ 社区与生态插件市场，支持 12 大分类管理、即时搜索、排序与一键安装；
   - 支持 npm / Git / 本地目录多源插件安装；
-  - 关键操作前自动快照备份（保留最近 10 次历史记录）；
-  - `cordis.patch.yml` 在线编辑器，内置语法解析与 `dsh --dump-config` 校验，失败秒级自动回滚。
+  - 关键操作前自动快照备份（保留最近 10 次历史记录）。
 
 ---
 
@@ -57,19 +57,19 @@ pnpm run build            # 同时生成安装包与便携版
 
 ## 📸 界面预览
 
-### 启动器：Web 服务生命周期托管
+### 启动管理：Web 服务生命周期托管
 
-![启动器：dsh web 服务启停与日志面板](docs/Images/1.png)
+![启动管理：dsh web 服务启停与日志面板](docs/Images/1.png)
 
-### Harness 服务安装与 Git 快进同步
+### 服务安装与 Git 快进同步
 
 ![Harness 路径、Git FF 同步、环境预检](docs/Images/2.png)
 
-### 插件与补丁
+### 插件管理
 
 ![已装插件列表：支持 link / Package 多源](docs/Images/3.png)
 
-![推荐官方插件：@cordisjs 核心插件](docs/Images/4.png)
+![插件市场：800+ 插件与 12 大分类管理](docs/Images/4.png)
 
 ![安装自定义插件：npm / Git 仓库 / 本地目录](docs/Images/5.png)
 
