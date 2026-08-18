@@ -1,6 +1,6 @@
 {
   "name": "deepseek-cockpit",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "DeepSeek Harness Windows Desktop Assistant",
   "main": "src/main.js",
   "scripts": {

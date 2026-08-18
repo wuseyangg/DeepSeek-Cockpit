@@ -3,7 +3,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('cockpit', {
   appInfo: {
     name: 'DeepSeek Harness Cockpit',
-    version: '1.0.0'
+    version: '1.0.1'
   },
   config: {
     load: () => ipcRenderer.invoke('config:load'),
