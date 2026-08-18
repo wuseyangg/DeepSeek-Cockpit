@@ -4,6 +4,18 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { validateAndNormalizeSource } = require('../src/services/plugin-source');
 
+test('PluginCatalog - electron-builder.yml packs data/**/* so registry-snapshot.json ships in the asar', async () => {
+  // 守卫：data/**/* 必须在 files 白名单里，否则主进程的
+  // path.join(__dirname, '../data/registry-snapshot.json') 在打包后会 ENOENT，
+  // 插件市场会掉到 3 项 fallback，分类全空。
+  const yml = await fs.readFile(path.join(__dirname, '../electron-builder.yml'), 'utf8');
+  assert.match(
+    yml,
+    /^\s*-\s*"data\/\*\*\/\*"/m,
+    'electron-builder.yml files: 白名单缺少 "data/**/*"，打包后插件市场会 fallback 到 3 项资源'
+  );
+});
+
 test('PluginCatalog - load and validate registry-snapshot.json structure', async () => {
   const snapshotPath = path.join(__dirname, '../data/registry-snapshot.json');
   const raw = await fs.readFile(snapshotPath, 'utf8');
@@ -49,4 +61,28 @@ test('PluginCatalog - convert registry plugins to valid install sources', async 
   const gitRes = await validateAndNormalizeSource(gitSource);
   assert.equal(gitRes.valid, true);
   assert.ok(gitRes.normalized.startsWith('git+https://') || gitRes.normalized.startsWith('github:'));
+});
+
+test('PluginCatalog - verify category aggregation and label mapping', async () => {
+  const snapshotPath = path.join(__dirname, '../data/registry-snapshot.json');
+  const raw = await fs.readFile(snapshotPath, 'utf8');
+  const data = JSON.parse(raw);
+
+  const categories = data.categories || {};
+  const plugins = data.plugins || [];
+
+  const counts = { all: plugins.length };
+  const presentCategories = new Set();
+
+  for (const p of plugins) {
+    const cat = p.category || 'other';
+    presentCategories.add(cat);
+    counts[cat] = (counts[cat] || 0) + 1;
+  }
+
+  assert.equal(counts.all, 839);
+  assert.ok(presentCategories.size >= 12);
+  for (const cat of presentCategories) {
+    assert.ok(counts[cat] > 0, `Category ${cat} should have > 0 count`);
+  }
 });

@@ -13,6 +13,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   initInstallView();
   initLauncherView();
   initPluginsView();
+  initMarketControls();
 });
 
 // 1. 主导航切换
@@ -899,6 +900,32 @@ window.approvePluginAction = async function(pkgName) {
 // 10. 插件市场与分类管理系统
 // ============================================================
 
+const DEFAULT_CATEGORY_NAMES = {
+  ui: { zh: 'UI 增强', en: 'UI Enhancements' },
+  theme: { zh: '主题与外观', en: 'Themes & Appearance' },
+  model: { zh: '模型与账号接入', en: 'Models & Providers' },
+  session: { zh: '会话与消息', en: 'Sessions & Messages' },
+  memory: { zh: '记忆', en: 'Memory' },
+  tools: { zh: '工具与能力', en: 'Tools & Capabilities' },
+  tool: { zh: '工具与能力', en: 'Tools & Capabilities' },
+  skill: { zh: '技能包', en: 'Skills' },
+  workflow: { zh: '工作流与自动化', en: 'Workflow & Automation' },
+  notify: { zh: '通知与集成', en: 'Notifications & Integrations' },
+  dev: { zh: '开发与运行时', en: 'Development & Runtime' },
+  market: { zh: '插件市场与管理', en: 'Plugin Markets & Managers' },
+  fun: { zh: '娱乐', en: 'Just for Fun' },
+  core: { zh: '核心插件', en: 'Core Plugins' },
+  other: { zh: '其他', en: 'Other' }
+};
+
+function getCategoryLabel(categories, catKey) {
+  if (!catKey) return '插件';
+  const meta = (categories && categories[catKey]) || DEFAULT_CATEGORY_NAMES[catKey];
+  if (!meta) return catKey;
+  if (typeof meta === 'string') return meta;
+  return meta.zh || meta.en || catKey;
+}
+
 const marketState = {
   initialized: false,
   rawCatalog: null,
@@ -1000,22 +1027,26 @@ async function renderCatalog(forceReload = false) {
   const plugins = catalog.plugins || [];
 
   const counts = { all: plugins.length };
+  const presentCategories = new Set();
+
   plugins.forEach(p => {
     const cat = p.category || 'other';
+    presentCategories.add(cat);
     counts[cat] = (counts[cat] || 0) + 1;
   });
 
   if (catList) {
-    const categoryEntries = Object.entries(categories);
+    const allCategoryKeys = Array.from(new Set([...Object.keys(categories), ...presentCategories]));
     let html = `
       <button class="category-chip ${marketState.activeCategory === 'all' ? 'active' : ''}" data-category="all">
         全部 <span class="chip-count">(${counts.all || 0})</span>
       </button>
     `;
 
-    categoryEntries.forEach(([key, meta]) => {
-      const label = meta.zh || meta.en || key;
+    allCategoryKeys.forEach(key => {
       const count = counts[key] || 0;
+      if (count === 0 && !categories[key]) return;
+      const label = getCategoryLabel(categories, key);
       const isActive = marketState.activeCategory === key ? 'active' : '';
       html += `
         <button class="category-chip ${isActive}" data-category="${key}">
@@ -1055,7 +1086,7 @@ function updateMarketView() {
 
   let filtered = allPlugins;
   if (marketState.activeCategory !== 'all') {
-    filtered = filtered.filter(p => p.category === marketState.activeCategory);
+    filtered = filtered.filter(p => (p.category || 'other') === marketState.activeCategory);
   }
 
   const query = marketState.searchQuery;
@@ -1110,7 +1141,8 @@ function updateMarketView() {
   if (nextBtn) nextBtn.disabled = marketState.currentPage >= totalPages;
 
   container.innerHTML = pageItems.map(p => {
-    const catLabel = categories[p.category]?.zh || categories[p.category]?.en || p.category || 'plugin';
+    const catKey = p.category || 'other';
+    const catLabel = getCategoryLabel(categories, catKey);
     const desc = p.description?.zh || p.description?.en || (typeof p.description === 'string' ? p.description : '暂无详细描述');
     const starsBadge = p.stars > 0 ? `<span class="badge badge-stars">★ ${p.stars}</span>` : '';
     const ownerLabel = p.owner ? `<div class="catalog-owner">by ${p.owner}</div>` : '';

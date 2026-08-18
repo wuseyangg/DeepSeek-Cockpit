@@ -357,20 +357,42 @@ function setupIpcHandlers() {
 
   // 插件管理相关
   ipcMain.handle('plugins:get-catalog', async () => {
-    try {
-      const snapshotPath = path.join(__dirname, '../data/registry-snapshot.json');
-      const data = await fs.readFile(snapshotPath, 'utf8');
-      return JSON.parse(data);
-    } catch {
+    const candidatePaths = [
+      path.join(__dirname, '../data/registry-snapshot.json'),
+      path.join(app.getAppPath(), 'data/registry-snapshot.json'),
+      process.resourcesPath ? path.join(process.resourcesPath, 'data/registry-snapshot.json') : null
+    ].filter(Boolean);
+
+    for (const p of candidatePaths) {
       try {
-        const catalogPath = path.join(__dirname, '../resources/plugin-catalog.json');
-        const data = await fs.readFile(catalogPath, 'utf8');
+        const data = await fs.readFile(p, 'utf8');
+        const parsed = JSON.parse(data);
+        if (parsed && (parsed.plugins || parsed.categories)) {
+          return parsed;
+        }
+      } catch {
+        // 继续尝试下一个候选路径
+      }
+    }
+
+    const fallbackPaths = [
+      path.join(__dirname, '../resources/plugin-catalog.json'),
+      path.join(app.getAppPath(), 'resources/plugin-catalog.json'),
+      process.resourcesPath ? path.join(process.resourcesPath, 'resources/plugin-catalog.json') : null,
+      process.resourcesPath ? path.join(process.resourcesPath, 'plugin-catalog.json') : null
+    ].filter(Boolean);
+
+    for (const p of fallbackPaths) {
+      try {
+        const data = await fs.readFile(p, 'utf8');
         const list = JSON.parse(data);
         return { categories: {}, plugins: Array.isArray(list) ? list : [] };
       } catch {
-        return { categories: {}, plugins: [] };
+        // 继续尝试下一个 fallback 路径
       }
     }
+
+    return { categories: {}, plugins: [] };
   });
 
   ipcMain.handle('plugins:list', async () => {

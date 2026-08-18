@@ -7,6 +7,7 @@ directories:
 files:
   - "src/**/*"
   - "resources/**/*"
+  - "data/**/*"
   - "package.json"
 win:
   target:
