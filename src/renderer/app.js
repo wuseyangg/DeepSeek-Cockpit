@@ -453,10 +453,23 @@ function initLauncherView() {
   if (btnRun) {
     btnRun.addEventListener('click', async () => {
       const port = portInput ? parseInt(portInput.value, 10) : 3080;
+      const shouldAutoOpen = autoOpenCheck ? autoOpenCheck.checked : true;
       updateLauncherUIState({ state: 'starting', port, url: null });
+
+      // 持久化保存
+      await window.cockpit.config.save({
+        web: { port, autoOpenBrowser: shouldAutoOpen }
+      });
+
       const res = await window.cockpit.web.start(port);
-      if (res && res.state === 'failed') {
-        alert(`启动失败: ${res.error || '端口可能被占用或编译产物缺失'}`);
+      if (res && res.state === 'running') {
+        if (shouldAutoOpen && res.url) {
+          await window.cockpit.web.open(res.url, true);
+        }
+      } else {
+        const errorMsg = (res && res.error) || 'Web 服务未能正常就绪，请检查日志面板输出';
+        updateLauncherUIState({ state: 'failed', port, url: null, error: errorMsg });
+        alert(`启动失败: ${errorMsg}`);
       }
     });
   }
@@ -470,15 +483,32 @@ function initLauncherView() {
   if (btnRestart) {
     btnRestart.addEventListener('click', async () => {
       const port = portInput ? parseInt(portInput.value, 10) : 3080;
+      const shouldAutoOpen = autoOpenCheck ? autoOpenCheck.checked : true;
       updateLauncherUIState({ state: 'starting', port, url: null });
-      await window.cockpit.web.restart(port);
+
+      await window.cockpit.config.save({
+        web: { port, autoOpenBrowser: shouldAutoOpen }
+      });
+
+      const res = await window.cockpit.web.restart(port);
+      if (res && res.state === 'running') {
+        if (shouldAutoOpen && res.url) {
+          await window.cockpit.web.open(res.url, true);
+        }
+      } else {
+        const errorMsg = (res && res.error) || 'Web 服务未能正常就绪，请检查日志面板输出';
+        updateLauncherUIState({ state: 'failed', port, url: null, error: errorMsg });
+        alert(`重启失败: ${errorMsg}`);
+      }
     });
   }
 
   if (btnOpen) {
     btnOpen.addEventListener('click', async () => {
-      if (webProcessState.url) {
-        await window.cockpit.web.open(webProcessState.url);
+      // 防御：必须 state === 'running' 才能开 BrowserWindow，
+      // 避免在 starting/failed 时打开一个会空白到需要强刷的窗口。
+      if (webProcessState.state === 'running' && webProcessState.url) {
+        await window.cockpit.web.open(webProcessState.url, true);
       }
     });
   }

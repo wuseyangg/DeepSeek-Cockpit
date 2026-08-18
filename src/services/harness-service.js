@@ -129,28 +129,83 @@ async function prepare(config = {}, broadcastLog = null) {
   return buildRes;
 }
 
-function pollHttpReadiness(url, maxWaitMs = 30000) {
+function pollHttpReadiness(url, isAliveCheck, maxWaitMs = 30000) {
   const startTime = Date.now();
   return new Promise((resolve, reject) => {
-    const check = () => {
-      const req = http.get(url, (res) => {
-        // 任何 HTTP 响应（包括 200, 302, 404 等）均代表服务已监听
-        resolve(true);
-      });
+    let timer = null;
+    let finished = false;
 
-      req.on('error', () => {
-        if (Date.now() - startTime >= maxWaitMs) {
-          reject(new Error(`等待服务就绪超时 (${maxWaitMs / 1000}s)`));
-        } else {
-          setTimeout(check, 500);
-        }
-      });
-
-      req.setTimeout(1000, () => {
-        req.destroy();
-      });
+    const cleanup = () => {
+      finished = true;
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
     };
-    check();
+
+    const isReadyStatus = (code) => code >= 200 && code < 400;
+    // 拿到首个 2xx/3xx 后给首屏编译留出的缓冲窗口，避免被 Vite/Hono 等
+    // 在编译首屏时返回的中间 200/占位页误导为"已就绪"。
+    const settleMs = 500;
+
+    const check = () => {
+      if (finished) return;
+
+      // 1. 每次检查前确认子进程依然处于运行状态
+      if (isAliveCheck && !isAliveCheck()) {
+        cleanup();
+        return reject(new Error('Web 进程已异常退出，未能成功启动'));
+      }
+
+      // 2. 超时判断
+      if (Date.now() - startTime >= maxWaitMs) {
+        cleanup();
+        return reject(new Error(`等待服务就绪超时 (${maxWaitMs / 1000}s)`));
+      }
+
+      // 3. HTTP 探测
+      try {
+        const req = http.get(url, (res) => {
+          // 排空响应体以便 socket 复用
+          res.resume();
+
+          if (!isReadyStatus(res.statusCode)) {
+            // 4xx/5xx 通常意味着服务端仍在编译首屏或挂载中间件，
+            // 按"未就绪"继续探测，不要让任何响应都误判为就绪。
+            if (finished) return;
+            timer = setTimeout(check, 500);
+            return;
+          }
+
+          // 首次拿到 2xx/3xx：清掉 pending 探测定时器（不要立刻 finished=true，
+          // 否则下面 settle 定时器回调里的 `if (finished) return` 会吞掉 resolve）。
+          if (timer) {
+            clearTimeout(timer);
+            timer = null;
+          }
+          timer = setTimeout(() => {
+            if (finished) return;
+            finished = true;
+            timer = null;
+            resolve(true);
+          }, settleMs);
+        });
+
+        req.on('error', () => {
+          if (finished) return;
+          timer = setTimeout(check, 500);
+        });
+
+        req.setTimeout(1500, () => {
+          req.destroy();
+        });
+      } catch {
+        if (finished) return;
+        timer = setTimeout(check, 500);
+      }
+    };
+
+    timer = setTimeout(check, 400);
   });
 }
 
@@ -184,17 +239,22 @@ async function startWeb(config = {}, port = 3080, broadcastLog = null, broadcast
   };
 
   try {
+    let hasExited = false;
+    let exitError = null;
+
     activeWebProcess = spawnManagedProcess('pnpm', ['dsh', 'web', '--port', targetPort.toString()], {
       cwd: hPath,
       onLog,
       onExit: (code) => {
+        hasExited = true;
+        exitError = code !== 0 ? `Web 进程异常退出 (code: ${code})` : null;
         currentWebState = {
           state: 'stopped',
           pid: null,
           url: null,
           port: targetPort,
           exitCode: code,
-          error: code !== 0 ? `Web 进程异常退出 (code: ${code})` : null
+          error: exitError
         };
         activeWebProcess = null;
         if (broadcastState) broadcastState(currentWebState);
@@ -204,29 +264,33 @@ async function startWeb(config = {}, port = 3080, broadcastLog = null, broadcast
     await activeWebProcess.ready;
     currentWebState.pid = activeWebProcess.pid;
 
-    // 探活
+    // 探活：等待 HTTP 端口完全就绪，并实时监测进程存活
     try {
-      await pollHttpReadiness(url, 30000);
+      await pollHttpReadiness(url, () => !hasExited && activeWebProcess && activeWebProcess.isRunning, 30000);
+
+      if (hasExited || !activeWebProcess || !activeWebProcess.isRunning) {
+        throw new Error(exitError || 'Web 进程已异常退出');
+      }
+
       currentWebState.state = 'running';
       if (broadcastState) broadcastState(currentWebState);
-
-      // 自动打开浏览器
-      if (config.web && config.web.autoOpenBrowser !== false) {
-        try {
-          const { shell } = require('electron');
-          if (shell && shell.openExternal) {
-            shell.openExternal(url);
-          }
-        } catch {}
-      }
+      return currentWebState;
     } catch (pollErr) {
-      if (currentWebState.state === 'starting') {
-        currentWebState.state = 'running'; // 降级为 running，若进程依然在运行
-        if (broadcastState) broadcastState(currentWebState);
+      if (activeWebProcess && activeWebProcess.isRunning) {
+        await activeWebProcess.stop();
+        activeWebProcess = null;
       }
+      currentWebState = {
+        state: 'failed',
+        pid: null,
+        url: null,
+        port: targetPort,
+        exitCode: currentWebState.exitCode,
+        error: exitError || pollErr.message || '启动探活超时'
+      };
+      if (broadcastState) broadcastState(currentWebState);
+      return currentWebState;
     }
-
-    return currentWebState;
   } catch (err) {
     currentWebState = {
       state: 'failed',
@@ -272,5 +336,8 @@ module.exports = {
   prepare,
   startWeb,
   stopWeb,
-  restartWeb
+  restartWeb,
+  // 暴露以供测试：验证"5xx 不算就绪 + 首次 2xx 后缓冲"行为。
+  // 不要在生产代码中直接依赖此函数。
+  _pollHttpReadiness: pollHttpReadiness
 };

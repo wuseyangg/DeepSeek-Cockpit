@@ -22,7 +22,7 @@ contextBridge.exposeInMainWorld('cockpit', {
     start: (port) => ipcRenderer.invoke('web:start', { port }),
     stop: () => ipcRenderer.invoke('web:stop'),
     restart: (port) => ipcRenderer.invoke('web:restart', { port }),
-    open: (url) => ipcRenderer.invoke('web:open', { url })
+    open: (url, inApp) => ipcRenderer.invoke('web:open', { url, inApp })
   },
   plugins: {
     list: () => ipcRenderer.invoke('plugins:list'),

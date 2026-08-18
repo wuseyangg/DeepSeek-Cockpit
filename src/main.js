@@ -29,9 +29,122 @@ if (process.platform === 'win32') {
 }
 
 let mainWindow = null;
+let webAppWindow = null;
 let tray = null;
 let appIcon = null;
 let isQuitting = false;
+
+// 跨调用复用 BrowserWindow 的重试状态：清理上一次的监听器和定时器，
+// 防止新一次的打开与旧一次的回调相互覆盖。
+const webAppRetryState = new WeakMap();
+const WEB_APP_MAX_RETRIES = 12;
+const WEB_APP_RETRY_DELAY_MS = 1000;
+
+function openInAppWebWindow(url) {
+  if (!url) return;
+
+  const isNew = !webAppWindow || webAppWindow.isDestroyed();
+  if (isNew) {
+    webAppWindow = new BrowserWindow({
+      width: 1280,
+      height: 840,
+      minWidth: 800,
+      minHeight: 600,
+      title: 'DeepSeek Harness Web',
+      icon: appIcon || undefined,
+      autoHideMenuBar: true,
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true,
+        sandbox: true
+      }
+    });
+
+    webAppWindow.on('closed', () => {
+      webAppRetryState.delete(webAppWindow);
+      webAppWindow = null;
+    });
+  } else {
+    if (webAppWindow.isMinimized()) webAppWindow.restore();
+    webAppWindow.show();
+    webAppWindow.focus();
+  }
+
+  // 始终重新加载：服务端首屏还在编译时，第一次 loadURL 可能拿到空白或 502；
+  // 复用旧窗口时早一次失败加载也必须能重试，而不是靠 getURL 差异触发。
+  retryLoadWebApp(webAppWindow, url);
+}
+
+function retryLoadWebApp(win, url) {
+  if (!win || win.isDestroyed()) return;
+
+  const prior = webAppRetryState.get(win);
+  if (prior) {
+    if (prior.timer) clearTimeout(prior.timer);
+    prior.listeners.forEach(({ evt, fn }) => {
+      try { win.webContents.removeListener(evt, fn); } catch { /* ignore */ }
+    });
+  }
+
+  const state = {
+    attempt: 0,
+    succeeded: false,
+    timer: null,
+    listeners: []
+  };
+  webAppRetryState.set(win, state);
+
+  const scheduleRetry = (reason) => {
+    if (state.succeeded) return;
+    if (state.attempt >= WEB_APP_MAX_RETRIES) {
+      try { win.setTitle('DeepSeek Harness Web — 加载失败'); } catch { /* ignore */ }
+      console.error(`[openInAppWebWindow] 放弃重试：${reason}（已尝试 ${state.attempt} 次）`);
+      return;
+    }
+    state.attempt += 1;
+    state.timer = setTimeout(() => {
+      if (state.succeeded || win.isDestroyed()) return;
+      try {
+        win.loadURL(url);
+      } catch (err) {
+        console.error('[openInAppWebWindow] loadURL 抛出：', err);
+      }
+    }, WEB_APP_RETRY_DELAY_MS);
+  };
+
+  const onFinishLoad = () => {
+    state.succeeded = true;
+    if (state.timer) {
+      clearTimeout(state.timer);
+      state.timer = null;
+    }
+    try { win.setTitle('DeepSeek Harness Web'); } catch { /* ignore */ }
+  };
+
+  const onFailLoad = (_event, errorCode, errorDescription) => {
+    scheduleRetry(`did-fail-load code=${errorCode} ${errorDescription}`);
+  };
+
+  const onRenderGone = () => {
+    scheduleRetry('render-process-gone');
+  };
+
+  win.webContents.on('did-finish-load', onFinishLoad);
+  win.webContents.on('did-fail-load', onFailLoad);
+  win.webContents.on('render-process-gone', onRenderGone);
+  state.listeners = [
+    { evt: 'did-finish-load', fn: onFinishLoad },
+    { evt: 'did-fail-load', fn: onFailLoad },
+    { evt: 'render-process-gone', fn: onRenderGone }
+  ];
+
+  try {
+    win.loadURL(url);
+  } catch (err) {
+    console.error('[openInAppWebWindow] 首次 loadURL 抛出：', err);
+    scheduleRetry('initial-loadURL-throw');
+  }
+}
 
 function showMainWindow() {
   if (!mainWindow || mainWindow.isDestroyed()) {
@@ -231,8 +344,13 @@ function setupIpcHandlers() {
     return { state: 'failed', error: '服务不可用' };
   });
 
-  ipcMain.handle('web:open', async (_event, { url }) => {
-    if (url) {
+  ipcMain.handle('web:open', async (_event, { url, inApp = null }) => {
+    if (!url) return;
+    const isLocalWeb = url.startsWith('http://127.0.0.1') || url.startsWith('http://localhost') || url.startsWith('https://127.0.0.1') || url.startsWith('https://localhost');
+    const shouldOpenInApp = inApp !== null ? inApp : isLocalWeb;
+    if (shouldOpenInApp) {
+      openInAppWebWindow(url);
+    } else {
       await shell.openExternal(url);
     }
   });
